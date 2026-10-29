@@ -93,7 +93,7 @@ func TestRenderMarksUpstreamStaleAndBadges(t *testing.T) {
 		`>상류 차단 · 확인 10-26</text>`,
 		`<a href="/issues?step=2"><circle cx="305" cy="35" r="9" fill="#D9363E"/>`,
 		`<a href="/issues?step=3"><circle cx="485" cy="35" r="9" fill="#8A919A"/>`,
-		`>? 라이선스 없음</text>`,
+		`>라이선스 없음</text>`,
 		`>아주아주아주아주아주 긴</text>`,
 		`>스텝 이름은 두 줄로…</text>`,
 		`fill="#D9363E" stroke="#D9363E" stroke-width="4"`, // 블록 스텝은 속까지 빨강

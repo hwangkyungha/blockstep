@@ -38,6 +38,7 @@ var funcs = template.FuncMap{
 	"stepLabel":  func(s string) string { return store.StepStatusLabel[s] },
 	"issueLabel": func(s string) string { return store.IssueStatusLabel[s] },
 	"list":       func(a ...any) []any { return a },
+	"indent":     func(depth int) string { return strings.Repeat("　", depth) },
 	"json": func(v any) (template.JS, error) {
 		b, err := json.Marshal(v)
 		return template.JS(b), err
@@ -221,11 +222,7 @@ func (srv *server) scenarioPage(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
-	steps, err := srv.store.ScenarioSteps(id)
-	if err != nil {
-		fail(w, err)
-		return
-	}
+	steps := store.Flatten(tree)
 	stepIssues, err := srv.store.StepIssues(id)
 	if err != nil {
 		fail(w, err)
@@ -270,7 +267,7 @@ func (srv *server) scenarioPage(w http.ResponseWriter, r *http.Request) {
 	stat := scenarioStat{Counts: map[string]int{}}
 	now := time.Now()
 	for i, st := range steps {
-		stat.add(st, staleDays, now)
+		stat.add(st.Step, staleDays, now)
 		data[i] = stepData{ID: st.ID, Name: st.Name, Status: st.Status, StatusLabel: store.StepStatusLabel[st.Status], Refs: st.Refs,
 			CheckedPackage: st.CheckedPackage, CheckedBy: st.CheckedBy, Issues: stepIssues[st.ID]}
 		if data[i].Issues == nil {

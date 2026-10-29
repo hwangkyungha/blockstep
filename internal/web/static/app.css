@@ -134,3 +134,7 @@ table.list tr.link-row:hover td { background: #FAFBFC; }
 .log { font-size: 12px; color: var(--muted); display: flex; flex-direction: column; gap: 4px; }
 .log b { color: var(--text); font-weight: 500; }
 .desc { white-space: pre-wrap; font-size: 13px; line-height: 1.7; }
+
+.combo-list { position: absolute; z-index: 20; max-height: 220px; overflow-y: auto; background: var(--card); border: 1px solid #D0D4DA; border-radius: 6px; box-shadow: 0 6px 18px rgba(0,0,0,.10); padding: 4px 0; font-size: 13px; }
+.combo-item { padding: 6px 12px; cursor: pointer; white-space: nowrap; }
+.combo-item:hover, .combo-item.active { background: var(--blue-bg); color: var(--blue-text); }

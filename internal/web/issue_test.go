@@ -89,7 +89,7 @@ func TestIssueUpdateReleasesStepAndNotes(t *testing.T) {
 		t.Errorf("빈 기록 = %d", rec.Code)
 	}
 	detail := e.get("/issues/1")
-	for _, want := range []string{"원인 파악 중", "김엔진 · <b>status</b> open → fixed", `<option value="김엔진">`} {
+	for _, want := range []string{"원인 파악 중", "김엔진 · <b>status</b> open → fixed", `id="combo-people">["김엔진","홍길동"]</script>`} {
 		if !strings.Contains(detail, want) {
 			t.Errorf("상세에 %q가 없다:\n%s", want, detail)
 		}

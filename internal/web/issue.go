@@ -15,16 +15,12 @@ import (
 // scenarioSteps는 이슈 폼에서 연결 스텝을 시나리오별로 고르기 위한 묶음이다.
 type scenarioSteps struct {
 	store.Scenario
-	Steps []store.Step
+	Steps []store.FlatStep
 }
 
 // formData는 이슈 폼에 공통으로 필요한 선택지다.
 func (srv *server) formData() (map[string]any, error) {
 	scenarios, err := srv.store.ListScenarios()
-	if err != nil {
-		return nil, err
-	}
-	steps, err := srv.store.AllSteps()
 	if err != nil {
 		return nil, err
 	}
@@ -37,15 +33,12 @@ func (srv *server) formData() (map[string]any, error) {
 		return nil, err
 	}
 	groups := make([]*scenarioSteps, len(scenarios))
-	byID := map[int64]*scenarioSteps{}
 	for i, sc := range scenarios {
-		groups[i] = &scenarioSteps{Scenario: sc}
-		byID[sc.ID] = groups[i]
-	}
-	for _, st := range steps {
-		if g, ok := byID[st.ScenarioID]; ok {
-			g.Steps = append(g.Steps, st)
+		steps, err := srv.store.ScenarioStepsOrdered(sc.ID)
+		if err != nil {
+			return nil, err
 		}
+		groups[i] = &scenarioSteps{Scenario: sc, Steps: steps}
 	}
 	return map[string]any{
 		"Groups":        groups,

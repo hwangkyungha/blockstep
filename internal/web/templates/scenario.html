@@ -34,7 +34,7 @@
       <div id="outline-error" class="error hidden" role="alert"></div>
       <div class="row">
         <button type="submit" class="btn primary">저장</button>
-        <label class="row" style="gap: 6px"><span class="muted">변경자</span><input name="actor" list="people" style="width: 10rem"></label>
+        <label class="row" style="gap: 6px"><span class="muted">변경자</span><input name="actor" data-combo="people" autocomplete="off" style="width: 10rem"></label>
         <small style="margin-left: auto">이름이 같은 스텝은 상태와 이슈 연결을 유지합니다. 지운 스텝의 이슈는 연결이 해제됩니다.</small>
       </div>
     </form>
@@ -61,17 +61,17 @@
   <div class="card pad stack">
     <h2>스텝 상태 변경</h2>
     <label class="field">스텝
-      <select id="step-select">{{range .Steps}}<option value="{{.ID}}">{{.Name}}</option>{{end}}</select>
+      <select id="step-select">{{range .Steps}}<option value="{{.ID}}">{{indent .Depth}}{{if .Branch}}{{.Branch}} › {{end}}{{.Name}}</option>{{end}}</select>
     </label>
     <form id="status-form" method="post" class="stack">
       <label class="field">상태
         <select name="status" id="status-select">{{range .StepStatuses}}<option value="{{.}}">{{stepLabel .}}{{if eq . "blocked"}} (미해결 이슈 필요){{end}}</option>{{end}}</select>
       </label>
       <label class="field">확인 패키지 (지원으로 바꿀 때 필수)
-        <input name="checked_package" id="checked-package" list="packages">
+        <input name="checked_package" id="checked-package" data-combo="packages" autocomplete="off">
       </label>
       <label class="field">확인자
-        <input name="checked_by" id="checked-by" list="people">
+        <input name="checked_by" id="checked-by" data-combo="people" autocomplete="off">
       </label>
       <div id="status-hint" class="note hidden"></div>
       <div class="row"><button type="submit" class="btn primary">상태 저장</button><small id="step-meta"></small></div>

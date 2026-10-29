@@ -383,3 +383,35 @@ func (s *Store) StaleDays() (int, error) {
 	}
 	return n, nil
 }
+
+// FlatStep은 트리를 아웃라인 순서로 펼친 스텝 하나다. Depth는 분기 깊이(본선 0), Branch는 속한 분기의 조건이다.
+type FlatStep struct {
+	Step
+	Depth  int
+	Branch string
+}
+
+// Flatten은 트리를 깊이 우선으로 펼친다. 본선 스텝, 그 스텝의 분기들(sort_order 순), 각 분기의 스텝, 다음 본선 스텝 순이다.
+func Flatten(nodes []StepNode) []FlatStep {
+	var out []FlatStep
+	var walk func(nodes []StepNode, depth int, branch string)
+	walk = func(nodes []StepNode, depth int, branch string) {
+		for _, n := range nodes {
+			out = append(out, FlatStep{Step: n.Step, Depth: depth, Branch: branch})
+			for _, b := range n.Branches {
+				walk(b.Steps, depth+1, b.Label)
+			}
+		}
+	}
+	walk(nodes, 0, "")
+	return out
+}
+
+// ScenarioStepsOrdered는 시나리오의 스텝을 아웃라인 순서로 돌려준다.
+func (s *Store) ScenarioStepsOrdered(scenarioID int64) ([]FlatStep, error) {
+	tree, err := s.ScenarioTree(scenarioID)
+	if err != nil {
+		return nil, err
+	}
+	return Flatten(tree), nil
+}

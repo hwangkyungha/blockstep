@@ -173,7 +173,7 @@ func Render(in Input) template.HTML {
 		fx, fy := x(br.from.col), y(br.from.row)
 		tx, ty := x(br.first.col), y(br.first.row)
 		segment(&b, fmt.Sprintf(`M%d %d V%d Q%d %d %d %d H%d`, fx, fy, ty-18, fx, ty, fx+18, ty, tx), br.first)
-		label := "? " + br.label
+		label := br.label
 		lw := textWidth(label) + 16
 		ly := fy + 82 + br.index*24
 		fmt.Fprintf(&b, `<g class="branch-label"><rect x="%d" y="%d" width="%d" height="20" rx="4" fill="#FFFFFF" stroke="#D0D4DA"/><text x="%d" y="%d" fill="#444B55" font-size="12">%s</text></g>`,

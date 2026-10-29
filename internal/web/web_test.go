@@ -97,7 +97,7 @@ func TestOutlineSaveAndPage(t *testing.T) {
 	e := newEnv(t)
 	id := e.newScenario("설치", "설치 실행\n라이선스 확인\n  ? 라이선스 없음\n    평가판 안내\n")
 	body := e.get("/scenarios/" + itoa(id))
-	for _, want := range []string{"라이선스 확인\n  ? 라이선스 없음\n    평가판 안내", `>평가판 안내</option>`, `id="status-form"`, `"name":"평가판 안내"`} {
+	for _, want := range []string{"라이선스 확인\n  ? 라이선스 없음\n    평가판 안내", `라이선스 없음 › 평가판 안내</option>`, `id="status-form"`, `"name":"평가판 안내"`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("화면에 %q가 없다:\n%s", want, body)
 		}
@@ -140,7 +140,7 @@ func TestScenarioPageHasMapAndListHasSummary(t *testing.T) {
 	e.do("POST", "/steps/"+itoa(steps[0].ID)+"/status", url.Values{"status": {"supported"}, "checked_package": {"2026-10-29"}, "checked_by": {"홍길동"}})
 
 	body := e.get("/scenarios/" + itoa(id))
-	for _, want := range []string{`<svg class="railmap"`, `data-step-id="` + itoa(steps[0].ID) + `"`, `>? 라이선스 없음</text>`} {
+	for _, want := range []string{`<svg class="railmap"`, `data-step-id="` + itoa(steps[0].ID) + `"`, `>라이선스 없음</text>`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("노선도에 %q가 없다", want)
 		}

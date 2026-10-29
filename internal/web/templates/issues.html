@@ -14,7 +14,7 @@
   <select name="status" aria-label="처리 상태"><option value="">상태: 전부</option>{{range .IssueStatuses}}<option value="{{.}}"{{if eq . $f.Status}} selected{{end}}>{{issueLabel .}}</option>{{end}}</select>
   <select name="assignee" aria-label="담당자"><option value="">담당자: 전부</option>{{range .People}}<option value="{{.}}"{{if eq . $f.Assignee}} selected{{end}}>{{.}}</option>{{end}}</select>
   <select name="scenario" aria-label="시나리오"><option value="">시나리오: 전부</option>{{range .Scenarios}}<option value="{{.ID}}"{{if eq .ID $f.ScenarioID}} selected{{end}}>{{.Name}}</option>{{end}}</select>
-  <select name="step" aria-label="스텝"><option value="">스텝: 전부</option>{{range .Groups}}{{$sc := .Name}}{{range .Steps}}<option value="{{.ID}}"{{if eq .ID $f.StepID}} selected{{end}}>{{$sc}} › {{.Name}}</option>{{end}}{{end}}</select>
+  <select name="step" aria-label="스텝"><option value="">스텝: 전부</option>{{range .Groups}}{{$sc := .Name}}{{range .Steps}}<option value="{{.ID}}"{{if eq .ID $f.StepID}} selected{{end}}>{{$sc}} › {{if .Branch}}{{.Branch}} › {{end}}{{.Name}}</option>{{end}}{{end}}</select>
   <label class="row" style="gap: 6px"><input type="checkbox" name="blocked" value="1"{{if eq $f.Blocked "1"}} checked{{end}}> 블록만</label>
   <button type="submit" class="btn">적용</button>
 </form>

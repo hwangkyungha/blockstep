@@ -1,6 +1,8 @@
 package store
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/hwangkyungha/blockstep/internal/outline"
@@ -177,5 +179,26 @@ func TestSetStepStatusRules(t *testing.T) {
 	st, _ = s.GetStep(two.ID)
 	if st.CheckedPackage != "2026-10-29" || st.CheckedBy != "홍길동" || !st.CheckedAt.Valid || st.CheckedTime().IsZero() {
 		t.Errorf("확인 기록 = %+v", st)
+	}
+}
+
+func TestScenarioStepsOrderedFollowsOutline(t *testing.T) {
+	s := openTemp(t)
+	scID, _ := s.CreateScenario("설치", "")
+	text := "하나\n  ? 조건A\n    A1\n    A2\n  ? 조건B\n    B1\n둘\n  ? 조건C\n    C1\n셋\n"
+	if err := s.SaveOutline(scID, mustParse(t, text), "홍길동"); err != nil {
+		t.Fatal(err)
+	}
+	flat, err := s.ScenarioStepsOrdered(scID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, f := range flat {
+		got = append(got, fmt.Sprintf("%d:%s:%s", f.Depth, f.Branch, f.Name))
+	}
+	want := "0::하나,1:조건A:A1,1:조건A:A2,1:조건B:B1,0::둘,1:조건C:C1,0::셋"
+	if strings.Join(got, ",") != want {
+		t.Errorf("순서 = %v", got)
 	}
 }

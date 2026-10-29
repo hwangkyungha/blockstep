@@ -20,7 +20,8 @@
 <main>
 {{template "content" .}}
 </main>
-{{with .People}}<datalist id="people">{{range .}}<option value="{{.}}">{{end}}</datalist>{{end}}
-{{with .Packages}}<datalist id="packages">{{range .}}<option value="{{.}}">{{end}}</datalist>{{end}}
+{{with .People}}<script type="application/json" id="combo-people">{{json .}}</script>{{end}}
+{{with .Packages}}<script type="application/json" id="combo-packages">{{json .}}</script>{{end}}
+<script src="/static/combo.js"></script>
 </body>
 </html>{{end}}
