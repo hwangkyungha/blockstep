@@ -30,7 +30,7 @@ var funcs = template.FuncMap{
 }
 
 func init() {
-	for _, name := range []string{"scenarios.html", "scenario.html", "issues.html", "issue_new.html", "issue.html"} {
+	for _, name := range []string{"scenarios.html", "scenario.html", "issues.html", "issue_new.html", "issue.html", "settings.html"} {
 		pages[name] = template.Must(template.New("").Funcs(funcs).ParseFS(templateFS, "templates/layout.html", "templates/_*.html", "templates/"+name))
 	}
 }
@@ -54,6 +54,8 @@ func Handler(s *store.Store) http.Handler {
 	mux.HandleFunc("GET /issues/{id}", srv.issuePage)
 	mux.HandleFunc("POST /issues/{id}", srv.issueUpdate)
 	mux.HandleFunc("POST /issues/{id}/notes", srv.addNote)
+	mux.HandleFunc("GET /settings", srv.settingsPage)
+	mux.HandleFunc("POST /settings", srv.saveSettings)
 	return mux
 }
 

@@ -1,0 +1,10 @@
+{{define "title"}}설정{{end}}
+{{define "content"}}
+<h1>설정</h1>
+{{if .Saved}}<p>저장했습니다.</p>{{end}}
+<form method="post" action="/settings">
+  <label>확인일 경과 기준(일) <input name="stale_days" type="number" min="0" value="{{.StaleDays}}" required> <small>지원 스텝의 확인일이 이 일수를 지나면 노선도에 「N일 지남」을 표시합니다</small></label>
+  <label>Slack Incoming Webhook URL <input name="slack_webhook_url" value="{{.SlackWebhookURL}}" style="width: 40rem" placeholder="비워 두면 Slack 알림을 보내지 않습니다"></label>
+  <button type="submit">저장</button>
+</form>
+{{end}}

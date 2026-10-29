@@ -177,12 +177,17 @@ func (srv *server) issueUpdate(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
+	old, err := srv.store.GetIssue(id)
+	if err != nil {
+		fail(w, err)
+		return
+	}
 	res, err := srv.store.UpdateIssue(id, parseIssueInput(r), strings.TrimSpace(r.FormValue("actor")))
 	if err != nil {
 		fail(w, err)
 		return
 	}
-	srv.notifyIssueUpdate(id, r.FormValue("status"), res)
+	srv.notifyIssueUpdate(id, old.Status, res)
 	http.Redirect(w, r, "/issues/"+strconv.FormatInt(id, 10), http.StatusSeeOther)
 }
 
@@ -198,7 +203,3 @@ func (srv *server) addNote(w http.ResponseWriter, r *http.Request) {
 	}
 	http.Redirect(w, r, "/issues/"+strconv.FormatInt(id, 10), http.StatusSeeOther)
 }
-
-// notifyNewIssue와 notifyIssueUpdate는 Slack 알림 자리다. 다음 단계에서 채운다.
-func (srv *server) notifyNewIssue(id int64, res store.AutoResult)                   {}
-func (srv *server) notifyIssueUpdate(id int64, status string, res store.AutoResult) {}

@@ -76,6 +76,17 @@ func (s *Store) CreateScenario(name, description string) (int64, error) {
 	return res.LastInsertId()
 }
 
+// SetSetting은 설정 값을 저장한다.
+func (s *Store) SetSetting(key, value string) error {
+	_, err := s.db.Exec("INSERT INTO setting (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", key, value)
+	return err
+}
+
+// LogNotifyFailure는 Slack 전송 실패를 이슈의 변경 이력에 남긴다.
+func (s *Store) LogNotifyFailure(issueID int64, err error) error {
+	return logChange(s.db, "issue", issueID, "slack", "", "", "", "Slack 전송 실패: "+err.Error())
+}
+
 // Setting은 setting 테이블의 값을 돌려준다. 없으면 빈 문자열이다.
 func (s *Store) Setting(key string) (string, error) {
 	var v string
