@@ -66,6 +66,7 @@ CREATE TABLE IF NOT EXISTS change_log (
     old_value TEXT    NOT NULL DEFAULT '',
     new_value TEXT    NOT NULL DEFAULT '',
     actor     TEXT    NOT NULL DEFAULT '',
+    note      TEXT    NOT NULL DEFAULT '',
     at        TEXT    NOT NULL DEFAULT (datetime('now'))
 );
 

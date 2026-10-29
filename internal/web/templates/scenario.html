@@ -1,0 +1,68 @@
+{{define "title"}}{{.Scenario.Name}}{{end}}
+{{define "content"}}
+<h1>{{.Scenario.Name}}</h1>
+{{if .Scenario.Description}}<p>{{.Scenario.Description}}</p>{{end}}
+
+<div class="tabs">
+  <button type="button" class="active" data-tab="map">노선도</button>
+  <button type="button" data-tab="edit">편집</button>
+</div>
+
+<section id="tab-map" class="tab">
+  {{if .Steps}}
+  <p>노선도는 다음 단계에서 그립니다.</p>
+  {{else}}
+  <p>아직 스텝이 없습니다. 「편집」 탭에서 아웃라인을 입력하세요.</p>
+  {{end}}
+</section>
+
+<section id="tab-edit" class="tab hidden">
+  <h2>아웃라인</h2>
+  <p>같은 깊이의 줄은 이어지는 스텝입니다. 스텝 아래에 들여쓴 <code>? 조건</code> 줄이 분기를 시작하고, 그 아래 더 들여쓴 줄이 분기의 스텝입니다. 줄 끝의 <code>[참조]</code>는 참조 칸에 들어갑니다.</p>
+  <form id="outline-form">
+    <textarea name="outline" rows="16">{{.Outline}}</textarea>
+    <label>변경자 <input name="actor"></label>
+    <button type="submit">저장</button>
+    <span id="outline-error" class="error"></span>
+  </form>
+
+  {{if .Steps}}
+  <h2>스텝 상태</h2>
+  <table>
+    <thead><tr><th>스텝</th><th>상태</th><th>확인 패키지</th><th>확인자</th><th>확인일</th><th></th></tr></thead>
+    <tbody>
+    {{range .Steps}}
+    <tr>
+      <td>{{.Name}}</td>
+      <td><select name="status" form="status-{{.ID}}">{{$cur := .Status}}{{range $.StepStatuses}}<option value="{{.}}"{{if eq . $cur}} selected{{end}}>{{stepLabel .}}</option>{{end}}</select></td>
+      <td><input name="checked_package" form="status-{{.ID}}" value="{{.CheckedPackage}}" list="packages"></td>
+      <td><input name="checked_by" form="status-{{.ID}}" value="{{.CheckedBy}}" list="people"></td>
+      <td>{{if .CheckedAt.Valid}}{{.CheckedTime.Format "2006-01-02"}}{{end}}</td>
+      <td><button type="submit" form="status-{{.ID}}">바꾸기</button></td>
+    </tr>
+    {{end}}
+    </tbody>
+  </table>
+  {{range .Steps}}<form id="status-{{.ID}}" method="post" action="/steps/{{.ID}}/status"></form>{{end}}
+  {{end}}
+</section>
+
+<script>
+document.querySelectorAll('.tabs button').forEach(function (b) {
+  b.addEventListener('click', function () {
+    document.querySelectorAll('.tabs button').forEach(function (x) { x.classList.remove('active'); });
+    document.querySelectorAll('.tab').forEach(function (x) { x.classList.add('hidden'); });
+    b.classList.add('active');
+    document.getElementById('tab-' + b.dataset.tab).classList.remove('hidden');
+  });
+});
+document.getElementById('outline-form').addEventListener('submit', function (e) {
+  e.preventDefault();
+  fetch('/scenarios/{{.Scenario.ID}}/outline', { method: 'PUT', body: new URLSearchParams(new FormData(e.target)) })
+    .then(function (r) {
+      if (r.ok) { location.reload(); return; }
+      r.text().then(function (t) { document.getElementById('outline-error').textContent = t; });
+    });
+});
+</script>
+{{end}}

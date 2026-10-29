@@ -1,0 +1,29 @@
+{{define "layout"}}<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>Blockstep - {{template "title" .}}</title>
+<style>
+  body { font-family: sans-serif; margin: 0; color: #222; }
+  nav { background: #1f2933; padding: .6rem 2rem; }
+  nav a { color: #fff; margin-right: 1.5rem; text-decoration: none; font-weight: bold; }
+  main { padding: 1.5rem 2rem; }
+  table { border-collapse: collapse; }
+  th, td { border: 1px solid #ccc; padding: .4rem .8rem; text-align: left; vertical-align: top; }
+  label { display: block; margin-bottom: .5rem; }
+  input, textarea, select { font: inherit; }
+  textarea { width: 40rem; max-width: 100%; }
+  .error { color: #D9363E; }
+  .tabs button { font: inherit; padding: .4rem 1rem; border: 1px solid #ccc; background: #f3f4f6; cursor: pointer; }
+  .tabs button.active { background: #fff; border-bottom-color: #fff; }
+  .tab { border: 1px solid #ccc; margin-top: -1px; padding: 1rem; }
+  .tab.hidden { display: none; }
+</style>
+</head>
+<body>
+<nav><a href="/">시나리오</a><a href="/issues">이슈</a><a href="/settings">설정</a></nav>
+<main>
+{{template "content" .}}
+</main>
+</body>
+</html>{{end}}
