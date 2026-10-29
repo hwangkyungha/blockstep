@@ -1,18 +1,32 @@
 {{define "title"}}시나리오 목록{{end}}
 {{define "content"}}
 <h1>시나리오 목록</h1>
-{{if .Scenarios}}
+<style>
+  .bar { display: flex; width: 16rem; height: 1rem; border: 1px solid #999; background: #fff; }
+  .bar span { display: block; height: 100%; }
+  .legend span { display: inline-block; margin-right: 1rem; }
+  .legend i { display: inline-block; width: .8rem; height: .8rem; border: 1px solid #999; vertical-align: middle; margin-right: .3rem; }
+  .num { text-align: right; }
+</style>
+<p class="legend">{{range .StepStatuses}}<span><i style="background: {{index $.Colors .}}"></i>{{stepLabel .}}</span>{{end}}</p>
 <table>
-  <thead><tr><th>이름</th><th>설명</th></tr></thead>
+  <thead><tr><th>시나리오</th><th>상태 비율</th><th>스텝</th><th>블록</th><th>{{.StaleDays}}일 지남</th></tr></thead>
   <tbody>
+  <tr>
+    <th>전체</th>
+    <td>{{template "statbar" (list .Total .StepStatuses .Colors)}}</td>
+    <td class="num">{{.Total.Total}}</td><td class="num">{{.Total.Blocked}}</td><td class="num">{{.Total.Stale}}</td>
+  </tr>
   {{range .Scenarios}}
-  <tr><td><a href="/scenarios/{{.ID}}">{{.Name}}</a></td><td>{{.Description}}</td></tr>
+  <tr>
+    <td><a href="/scenarios/{{.ID}}">{{.Name}}</a>{{if .Description}}<br><small>{{.Description}}</small>{{end}}</td>
+    <td>{{template "statbar" (list . $.StepStatuses $.Colors)}}</td>
+    <td class="num">{{.Total}}</td><td class="num">{{.Blocked}}</td><td class="num">{{.Stale}}</td>
+  </tr>
   {{end}}
   </tbody>
 </table>
-{{else}}
-<p>아직 시나리오가 없습니다.</p>
-{{end}}
+{{if not .Scenarios}}<p>아직 시나리오가 없습니다.</p>{{end}}
 
 <h2>시나리오 만들기</h2>
 <form method="post" action="/scenarios">
@@ -21,3 +35,5 @@
   <button type="submit">만들기</button>
 </form>
 {{end}}
+
+{{define "statbar"}}{{$st := index . 0}}{{$colors := index . 2}}<div class="bar">{{range index . 1}}{{if index $st.Counts .}}<span style="width: {{$st.Percent .}}%; background: {{index $colors .}}" title="{{stepLabel .}} {{index $st.Counts .}}"></span>{{end}}{{end}}</div>{{end}}

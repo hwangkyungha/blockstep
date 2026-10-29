@@ -10,8 +10,10 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/hwangkyungha/blockstep/internal/outline"
+	"github.com/hwangkyungha/blockstep/internal/railmap"
 	"github.com/hwangkyungha/blockstep/internal/store"
 )
 
@@ -24,6 +26,7 @@ var pages = map[string]*template.Template{}
 var funcs = template.FuncMap{
 	"stepLabel":  func(s string) string { return store.StepStatusLabel[s] },
 	"issueLabel": func(s string) string { return store.IssueStatusLabel[s] },
+	"list":       func(a ...any) []any { return a },
 }
 
 func init() {
@@ -76,13 +79,67 @@ func pathID(r *http.Request) (int64, error) {
 	return id, nil
 }
 
+// scenarioStat은 시나리오 목록 한 줄의 요약이다. 상태별 수, 블록 스텝 수, 확인일이 오래된 스텝 수를 센다.
+type scenarioStat struct {
+	store.Scenario
+	Total   int
+	Counts  map[string]int
+	Blocked int
+	Stale   int
+}
+
+func (st *scenarioStat) add(step store.Step, staleDays int, now time.Time) {
+	st.Total++
+	st.Counts[step.Status]++
+	if step.Status == store.StepBlocked {
+		st.Blocked++
+	}
+	if step.Status == store.StepSupported && step.CheckedAt.Valid && int(now.Sub(step.CheckedTime()).Hours()/24) >= staleDays {
+		st.Stale++
+	}
+}
+
+// Percent는 상태별 비율 막대의 너비(%)다.
+func (st *scenarioStat) Percent(status string) float64 {
+	if st.Total == 0 {
+		return 0
+	}
+	return float64(st.Counts[status]) * 100 / float64(st.Total)
+}
+
 func (srv *server) scenarioList(w http.ResponseWriter, r *http.Request) {
 	list, err := srv.store.ListScenarios()
 	if err != nil {
 		fail(w, err)
 		return
 	}
-	srv.render(w, "scenarios.html", map[string]any{"Scenarios": list})
+	steps, err := srv.store.AllSteps()
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	staleDays, err := srv.store.StaleDays()
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	now := time.Now()
+	total := &scenarioStat{Counts: map[string]int{}}
+	stats := make([]*scenarioStat, len(list))
+	byID := map[int64]*scenarioStat{}
+	for i, sc := range list {
+		stats[i] = &scenarioStat{Scenario: sc, Counts: map[string]int{}}
+		byID[sc.ID] = stats[i]
+	}
+	for _, step := range steps {
+		if st, ok := byID[step.ScenarioID]; ok {
+			st.add(step, staleDays, now)
+		}
+		total.add(step, staleDays, now)
+	}
+	srv.render(w, "scenarios.html", map[string]any{
+		"Scenarios": stats, "Total": total, "StaleDays": staleDays, "StepStatuses": store.StepStatuses, "Colors": railmap.Color,
+	})
 }
 
 func (srv *server) createScenario(w http.ResponseWriter, r *http.Request) {
@@ -120,8 +177,19 @@ func (srv *server) scenarioPage(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
+	unresolved, err := srv.store.UnresolvedCounts(id)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	staleDays, err := srv.store.StaleDays()
+	if err != nil {
+		fail(w, err)
+		return
+	}
 	srv.render(w, "scenario.html", map[string]any{
 		"Scenario":     sc,
+		"Map":          railmap.Render(railmap.Input{Tree: tree, Unresolved: unresolved, StaleDays: staleDays, Now: time.Now()}),
 		"Outline":      outline.Format(store.ToOutline(tree)),
 		"Steps":        steps,
 		"StepStatuses": store.StepStatuses,

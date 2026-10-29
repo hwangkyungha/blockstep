@@ -10,7 +10,7 @@
 
 <section id="tab-map" class="tab">
   {{if .Steps}}
-  <p>노선도는 다음 단계에서 그립니다.</p>
+  <div style="overflow-x: auto">{{.Map}}</div>
   {{else}}
   <p>아직 스텝이 없습니다. 「편집」 탭에서 아웃라인을 입력하세요.</p>
   {{end}}

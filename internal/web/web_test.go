@@ -132,3 +132,23 @@ func TestStepStatusForm(t *testing.T) {
 		t.Errorf("스텝 = %+v", st)
 	}
 }
+
+func TestScenarioPageHasMapAndListHasSummary(t *testing.T) {
+	e := newEnv(t)
+	id := e.newScenario("설치", "설치 실행\n라이선스 확인\n  ? 라이선스 없음\n    평가판 안내\n설정\n")
+	steps, _ := e.store.ScenarioSteps(id)
+	e.do("POST", "/steps/"+itoa(steps[0].ID)+"/status", url.Values{"status": {"supported"}, "checked_package": {"2026-10-29"}, "checked_by": {"홍길동"}})
+
+	body := e.get("/scenarios/" + itoa(id))
+	for _, want := range []string{`<svg class="railmap"`, `data-step-id="` + itoa(steps[0].ID) + `"`, `>라이선스 없음</text>`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("노선도에 %q가 없다", want)
+		}
+	}
+	list := e.get("/")
+	for _, want := range []string{`<th>14일 지남</th>`, `title="지원 1"`, `title="미확인 3"`, `<td class="num">4</td>`} {
+		if !strings.Contains(list, want) {
+			t.Errorf("목록에 %q가 없다:\n%s", want, list)
+		}
+	}
+}
