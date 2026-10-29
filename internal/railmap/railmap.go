@@ -18,7 +18,7 @@ import (
 const (
 	colW    = 150 // 스텝 사이 가로 간격
 	rowH    = 120 // 본선과 분기 사이 세로 간격
-	marginX = 50
+	marginX = 80
 	marginY = 40
 	radius  = 11
 )
