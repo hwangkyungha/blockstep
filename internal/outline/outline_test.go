@@ -78,3 +78,46 @@ func TestParseErrors(t *testing.T) {
 		t.Errorf("빈 입력: %v %v", steps, err)
 	}
 }
+
+func TestParseBranchStepsAtSameDepthAsCondition(t *testing.T) {
+	in := `install.cmd 실행
+ ? 기존에 설치된 버전 있음
+  1.a 기존 사용자 설정 유지 확인
+   ? -installDir 옵션으로 다른 경로 지정하고 설치
+   1.a 새 경로 path 추가, 기존 경로 삭제 확인
+`
+	got, err := Parse(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []Step{{Name: "install.cmd 실행", Branches: []Branch{{
+		Label: "기존에 설치된 버전 있음",
+		Steps: []Step{{Name: "기존 사용자 설정 유지 확인", Branches: []Branch{{
+			Label: "-installDir 옵션으로 다른 경로 지정하고 설치",
+			Steps: []Step{{Name: "새 경로 path 추가, 기존 경로 삭제 확인"}},
+		}}}},
+	}}}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("got %+v\nwant %+v", got, want)
+	}
+
+	// 같은 깊이의 다음 `?` 줄은 같은 스텝의 새 분기다. 분기 스텝 뒤에 본선 스텝이 이어질 수 있다.
+	in2 := "A\n ? 조건1\n s1\n s2\n ? 조건2\n t1\nB\n"
+	got, err = Parse(in2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want = []Step{
+		{Name: "A", Branches: []Branch{
+			{Label: "조건1", Steps: []Step{{Name: "s1"}, {Name: "s2"}}},
+			{Label: "조건2", Steps: []Step{{Name: "t1"}}},
+		}},
+		{Name: "B"},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("got %+v\nwant %+v", got, want)
+	}
+	if again, _ := Parse(Format(got)); !reflect.DeepEqual(again, got) {
+		t.Errorf("되돌린 결과가 다르다:\n%s", Format(got))
+	}
+}

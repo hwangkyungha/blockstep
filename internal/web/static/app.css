@@ -100,9 +100,9 @@ table.list tr.link-row:hover td { background: #FAFBFC; }
 .summary .card { padding: 14px 16px; display: flex; flex-direction: column; gap: 4px; }
 .summary .label { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
 .summary .value { font-size: 26px; font-weight: 700; }
-.bar { display: flex; height: 12px; border-radius: 6px; overflow: hidden; background: #E8EAED; min-width: 160px; }
+.bar { display: flex; height: 12px; border-radius: 6px; overflow: hidden; background: #E8EAED; border: 1px solid #D0D4DA; min-width: 160px; }
 .bar span { display: block; height: 100%; }
-.bar span.unchecked { background: #fff; border-left: 1px solid #D0D4DA; }
+.bar span.unchecked { background: transparent; }
 .legend { display: flex; gap: 16px; font-size: 12px; color: var(--muted); flex-wrap: wrap; }
 .legend span { display: inline-flex; align-items: center; gap: 6px; }
 .legend i { display: inline-block; width: 14px; height: 8px; border-radius: 4px; }

@@ -30,14 +30,31 @@
   <div class="card pad stack">
     <div class="row" style="justify-content: space-between"><h2>아웃라인</h2><small>같은 깊이의 줄은 이어지는 스텝 · 들여쓴 <code>? 조건</code> 줄이 분기 · 줄 끝 <code>[참조]</code></small></div>
     <form id="outline-form" class="stack">
-      <textarea name="outline" rows="16" class="mono" aria-label="시나리오 아웃라인">{{.Outline}}</textarea>
+      <textarea name="outline" id="outline-text" rows="16" class="mono" aria-label="시나리오 아웃라인" spellcheck="false">{{.Outline}}</textarea>
+      <div id="outline-error" class="error hidden" role="alert"></div>
       <div class="row">
         <button type="submit" class="btn primary">저장</button>
         <label class="row" style="gap: 6px"><span class="muted">변경자</span><input name="actor" list="people" style="width: 10rem"></label>
-        <span id="outline-error" class="error"></span>
         <small style="margin-left: auto">이름이 같은 스텝은 상태와 이슈 연결을 유지합니다. 지운 스텝의 이슈는 연결이 해제됩니다.</small>
       </div>
     </form>
+    <details class="muted">
+      <summary style="cursor: pointer">쓰는 법과 예시 (Tab 들여쓰기 · Shift+Tab 내어쓰기)</summary>
+      <div class="row" style="align-items: flex-start; gap: 16px; margin-top: 8px">
+<pre class="mono" style="margin: 0; padding: 10px 12px; background: var(--gray-bg); border-radius: 6px; font-size: 12px; line-height: 1.6">lct install 실행 [install-SCN-01]
+  ? 기존에 설치된 버전 있음
+    기존 사용자 설정 유지 확인
+      ? -installDir로 다른 경로 지정
+        새 경로 추가, 기존 경로 삭제 확인
+에이전트 선택</pre>
+        <ul style="margin: 0; padding-left: 1.2em; font-size: 12px; line-height: 1.7">
+          <li>같은 깊이의 줄은 이어지는 스텝입니다.</li>
+          <li>스텝 아래에 들여쓴 <code>? 조건</code> 줄이 분기를 시작합니다. 그 다음 줄부터 같은 깊이이거나 더 깊은 줄이 분기의 스텝입니다.</li>
+          <li><code>?</code> 줄과 같은 깊이의 다음 <code>?</code> 줄은 같은 스텝의 새 분기입니다. 더 얕은 줄이 나오면 분기가 끝납니다.</li>
+          <li>줄 끝의 <code>[참조]</code>는 참조 칸에, 줄 앞의 <code>1.</code> <code>3a.</code> <code>1.a</code> 같은 번호는 무시합니다.</li>
+        </ul>
+      </div>
+    </details>
   </div>
 
   {{if .Steps}}
@@ -79,13 +96,51 @@
     b.addEventListener('click', function () { showTab(b.dataset.tab); });
   });
 
+  var errBox = document.getElementById('outline-error');
   document.getElementById('outline-form').addEventListener('submit', function (e) {
     e.preventDefault();
     fetch('/scenarios/{{.Scenario.ID}}/outline', { method: 'PUT', body: new URLSearchParams(new FormData(e.target)) })
       .then(function (r) {
         if (r.ok) { location.href = location.pathname + '?tab=edit'; return; }
-        r.text().then(function (t) { document.getElementById('outline-error').textContent = t; });
+        r.text().then(function (t) { errBox.textContent = '저장하지 못했습니다. ' + t.trim(); errBox.classList.remove('hidden'); });
       });
+  });
+
+  // 편집창에서 Tab은 공백 두 칸을 넣고 Shift+Tab은 줄 앞의 공백 두 칸을 뺀다. 여러 줄을 선택했으면 선택한 줄 전부에 적용한다.
+  var ta = document.getElementById('outline-text');
+  ta.addEventListener('keydown', function (e) {
+    if (e.key !== 'Tab') { return; }
+    e.preventDefault();
+    var v = ta.value, s = ta.selectionStart, en = ta.selectionEnd;
+    var lineStart = v.lastIndexOf('\n', s - 1) + 1;
+    var lineEnd = v.indexOf('\n', en);
+    if (lineEnd === -1) { lineEnd = v.length; }
+    var block = v.slice(lineStart, lineEnd);
+    var multi = block.indexOf('\n') !== -1;
+    if (!e.shiftKey && !multi) {
+      ta.value = v.slice(0, s) + '  ' + v.slice(en);
+      ta.selectionStart = ta.selectionEnd = s + 2;
+      return;
+    }
+    var lines = block.split('\n');
+    var firstDelta = 0, total = 0;
+    var out = lines.map(function (line, i) {
+      var d;
+      if (e.shiftKey) {
+        var n = Math.min(2, line.match(/^ */)[0].length);
+        d = -n;
+        line = line.slice(n);
+      } else {
+        d = 2;
+        line = '  ' + line;
+      }
+      if (i === 0) { firstDelta = d; }
+      total += d;
+      return line;
+    });
+    ta.value = v.slice(0, lineStart) + out.join('\n') + v.slice(lineEnd);
+    ta.selectionStart = Math.max(lineStart, s + firstDelta);
+    ta.selectionEnd = Math.max(ta.selectionStart, en + total);
   });
 
   var select = document.getElementById('step-select');

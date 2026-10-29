@@ -23,7 +23,7 @@
       <label class="field">이름 <input name="name" required></label>
       <label class="field">설명 <input name="description" placeholder="예: install → config → 분석 → 생성 → 실행"></label>
     </div>
-    <div class="row"><button type="submit" class="btn primary">만들기</button></div>
+    <div class="row"><button type="submit" class="btn primary">만들기</button><button type="button" class="btn" onclick="var f = document.getElementById('new-scenario'); f.querySelector('form').reset(); f.hidden = true;">취소</button></div>
   </form>
 </section>
 

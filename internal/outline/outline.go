@@ -6,9 +6,10 @@
 //	    평가판 안내
 //	lct config ct
 //
-// 같은 깊이의 줄은 이어지는 스텝이다. 스텝 아래에 들여쓴 `? 조건` 줄이 분기를 시작하고,
-// 그 아래에 더 들여쓴 줄이 분기의 스텝이다. 줄 끝의 `[참조]`는 refs 칸에 들어간다.
-// 줄 앞의 `1.`, `3a.` 같은 번호는 무시한다.
+// 같은 깊이의 줄은 이어지는 스텝이다. 스텝 아래에 들여쓴 `? 조건` 줄이 분기를 시작한다.
+// `? 조건` 줄 다음에 오는 줄이 그 줄과 같은 깊이이거나 더 깊으면 분기의 스텝이고,
+// 같은 깊이의 다음 `? 조건` 줄은 같은 스텝에서 갈라지는 새 분기다. `? 조건` 줄보다 얕은 줄이 나오면 분기가 끝난다.
+// 줄 끝의 `[참조]`는 refs 칸에 들어간다. 줄 앞의 `1.`, `3a.`, `1.a` 같은 번호는 무시한다.
 package outline
 
 import (
@@ -37,7 +38,7 @@ type line struct {
 }
 
 var (
-	numberPrefix = regexp.MustCompile(`^\d+[a-zA-Z]*[.)]\s+`)
+	numberPrefix = regexp.MustCompile(`^\d+[a-zA-Z]*(?:[.)][a-zA-Z0-9]*)+\s+`)
 	refsSuffix   = regexp.MustCompile(`\s*\[([^\]]*)\]$`)
 )
 
@@ -65,11 +66,17 @@ func Parse(text string) ([]Step, error) {
 		return nil, nil
 	}
 	p := &parser{lines: lines}
+	if isBranch(lines[0]) {
+		return nil, p.errorf("분기 줄은 스텝 아래에 들여써야 합니다")
+	}
 	steps, err := p.steps(lines[0].indent)
 	if err != nil {
 		return nil, err
 	}
 	if p.i < len(lines) {
+		if isBranch(lines[p.i]) {
+			return nil, p.errorf("분기 줄은 스텝 아래에 들여써야 합니다")
+		}
 		return nil, p.errorf("들여쓰기가 맞지 않습니다")
 	}
 	return steps, nil
@@ -86,14 +93,12 @@ func (p *parser) errorf(format string, a ...any) error {
 
 func isBranch(l line) bool { return strings.HasPrefix(l.text, "?") }
 
-// steps는 indent 깊이의 스텝 줄을 모은다. 더 깊은 줄은 분기로 읽는다.
+// steps는 indent 깊이의 스텝 줄을 모은다. 더 깊은 `?` 줄은 그 스텝의 분기로 읽는다.
+// 같은 깊이의 `?` 줄을 만나면 멈춘다. 그 줄은 이 목록을 품은 스텝의 새 분기다.
 func (p *parser) steps(indent int) ([]Step, error) {
 	var steps []Step
-	for p.i < len(p.lines) && p.lines[p.i].indent == indent {
+	for p.i < len(p.lines) && p.lines[p.i].indent == indent && !isBranch(p.lines[p.i]) {
 		l := p.lines[p.i]
-		if isBranch(l) {
-			return nil, p.errorf("분기 줄은 스텝보다 들여써야 합니다")
-		}
 		st := Step{Name: numberPrefix.ReplaceAllString(l.text, "")}
 		if m := refsSuffix.FindStringSubmatch(st.Name); m != nil {
 			st.Refs = strings.TrimSpace(m[1])
@@ -113,9 +118,10 @@ func (p *parser) steps(indent int) ([]Step, error) {
 				return nil, p.errorf("분기 조건이 비어 있습니다")
 			}
 			p.i++
-			if p.i >= len(p.lines) || p.lines[p.i].indent <= bl.indent {
+			// 분기의 스텝은 `?` 줄과 같은 깊이이거나 더 깊은 줄이다.
+			if p.i >= len(p.lines) || p.lines[p.i].indent < bl.indent || isBranch(p.lines[p.i]) {
 				p.i--
-				return nil, p.errorf("분기 아래에 들여쓴 스텝이 없습니다")
+				return nil, p.errorf("분기 아래에 스텝이 없습니다")
 			}
 			sub, err := p.steps(p.lines[p.i].indent)
 			if err != nil {
@@ -132,7 +138,7 @@ func (p *parser) steps(indent int) ([]Step, error) {
 	return steps, nil
 }
 
-// Format은 스텝 트리를 아웃라인 텍스트로 바꾼다. Parse와 서로 되돌릴 수 있다.
+// Format은 스텝 트리를 아웃라인 텍스트로 바꾼다. 분기의 스텝은 `?` 줄보다 더 들여쓴다. Parse와 서로 되돌릴 수 있다.
 func Format(steps []Step) string {
 	var b strings.Builder
 	format(&b, steps, 0)
