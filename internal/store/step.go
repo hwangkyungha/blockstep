@@ -98,7 +98,7 @@ func (s *Store) ScenarioSteps(scenarioID int64) ([]Step, error) {
 
 // AllSteps는 모든 시나리오의 스텝을 시나리오, sort_order 순으로 돌려준다.
 func (s *Store) AllSteps() ([]Step, error) {
-	return s.querySteps("SELECT " + stepColumns + " FROM step ORDER BY scenario_id, sort_order, id")
+	return s.querySteps("SELECT " + stepColumns + " FROM step ORDER BY scenario_id, parent_branch_id IS NOT NULL, parent_branch_id, sort_order, id")
 }
 
 // ScenarioTree는 시나리오의 스텝과 분기를 트리로 돌려준다.

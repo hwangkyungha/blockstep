@@ -1,0 +1,47 @@
+{{define "title"}}이슈 #{{.Issue.ID}}{{end}}
+{{define "content"}}
+<h1>#{{.Issue.ID}} {{.Issue.Title}}
+  {{if .Issue.Blocked}}<span class="badge blocked">블록</span>{{end}}
+  <span class="badge">{{issueLabel .Issue.Status}}</span>
+  <span class="badge">{{.Issue.Priority}}</span>
+</h1>
+<p><small>등록 {{.Issue.CreatedAt}} · 마지막 변경 {{.Issue.UpdatedAt}}</small></p>
+<p>연결 스텝:
+{{range .Issue.Steps}}<a href="/scenarios/{{.ScenarioID}}">{{.ScenarioName}}</a> › {{.StepName}} <small>({{stepLabel .StepStatus}})</small>&nbsp; {{end}}
+</p>
+
+<div class="cols">
+<section>
+  <h2>항목</h2>
+  <form method="post" action="/issues/{{.Issue.ID}}">
+  {{template "issue_fields" .}}
+  <label>변경자 <input name="actor" list="people"></label>
+  <button type="submit">저장</button>
+  </form>
+</section>
+
+<section>
+  <h2>처리 상황 기록</h2>
+  {{if .Notes}}
+  <ul>
+  {{range .Notes}}<li><small>{{.CreatedAt}} {{.Author}}</small><br>{{.Body}}</li>{{end}}
+  </ul>
+  {{else}}<p>아직 기록이 없습니다.</p>{{end}}
+  <form method="post" action="/issues/{{.Issue.ID}}/notes">
+    <label>작성자 <input name="author" list="people" required></label>
+    <label>내용<br><textarea name="body" rows="3" required></textarea></label>
+    <button type="submit">기록 추가</button>
+  </form>
+
+  <h2>변경 이력</h2>
+  {{if .Logs}}
+  <table>
+    <thead><tr><th>때</th><th>항목</th><th>이전</th><th>이후</th><th>변경자</th><th>비고</th></tr></thead>
+    <tbody>
+    {{range .Logs}}<tr><td>{{.At}}</td><td>{{.Field}}</td><td>{{.OldValue}}</td><td>{{.NewValue}}</td><td>{{.Actor}}</td><td>{{.Note}}</td></tr>{{end}}
+    </tbody>
+  </table>
+  {{else}}<p>이력이 없습니다.</p>{{end}}
+</section>
+</div>
+{{end}}

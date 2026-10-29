@@ -1,0 +1,8 @@
+{{define "title"}}이슈 등록{{end}}
+{{define "content"}}
+<h1>이슈 등록</h1>
+<form method="post" action="/issues">
+{{template "issue_fields" .}}
+<button type="submit">등록</button>
+</form>
+{{end}}

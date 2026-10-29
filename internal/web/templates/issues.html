@@ -1,0 +1,34 @@
+{{define "title"}}이슈 목록{{end}}
+{{define "content"}}
+<h1>이슈 목록</h1>
+<form method="get" action="/issues" class="filters">
+  <label>처리 상태 <select name="status"><option value="">전체</option>{{$f := .Filter}}{{range .IssueStatuses}}<option value="{{.}}"{{if eq . $f.Status}} selected{{end}}>{{issueLabel .}}</option>{{end}}</select></label>
+  <label>담당자 <select name="assignee"><option value="">전체</option>{{range .People}}<option value="{{.}}"{{if eq . $f.Assignee}} selected{{end}}>{{.}}</option>{{end}}</select></label>
+  <label>블록 여부 <select name="blocked"><option value="">전체</option><option value="1"{{if eq $f.Blocked "1"}} selected{{end}}>블록</option><option value="0"{{if eq $f.Blocked "0"}} selected{{end}}>블록 아님</option></select></label>
+  <label>시나리오 <select name="scenario"><option value="">전체</option>{{range .Scenarios}}<option value="{{.ID}}"{{if eq .ID $f.ScenarioID}} selected{{end}}>{{.Name}}</option>{{end}}</select></label>
+  <label>스텝 <select name="step"><option value="">전체</option>{{range .Groups}}{{range .Steps}}<option value="{{.ID}}"{{if eq .ID $f.StepID}} selected{{end}}>{{.Name}}</option>{{end}}{{end}}</select></label>
+  <button type="submit">필터</button>
+  <a href="/issues">초기화</a>
+</form>
+{{with .FilterStep}}<p>스텝 「{{.Name}}」의 이슈입니다. <a href="/issues/new?step={{.ID}}">이 스텝에 이슈 등록</a></p>{{end}}
+<p><a href="/issues/new">새 이슈 등록</a></p>
+{{if .Issues}}
+<table>
+  <thead><tr><th>블록</th><th>긴급도</th><th>목표 기한</th><th>제목</th><th>연결 스텝</th><th>처리 상태</th><th>담당자</th><th>발견 패키지</th></tr></thead>
+  <tbody>
+  {{range .Issues}}
+  <tr>
+    <td>{{if .Blocked}}<span class="badge blocked">블록</span>{{end}}</td>
+    <td>{{.Priority}}</td>
+    <td>{{.DueDate}}</td>
+    <td><a href="/issues/{{.ID}}">#{{.ID}} {{.Title}}</a></td>
+    <td>{{range .Steps}}{{.ScenarioName}} › {{.StepName}}<br>{{end}}</td>
+    <td>{{issueLabel .Status}}</td>
+    <td>{{.Assignee}}</td>
+    <td>{{.FoundPackage}}</td>
+  </tr>
+  {{end}}
+  </tbody>
+</table>
+{{else}}<p>이슈가 없습니다.</p>{{end}}
+{{end}}

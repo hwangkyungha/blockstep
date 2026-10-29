@@ -30,8 +30,8 @@ var funcs = template.FuncMap{
 }
 
 func init() {
-	for _, name := range []string{"scenarios.html", "scenario.html"} {
-		pages[name] = template.Must(template.New("").Funcs(funcs).ParseFS(templateFS, "templates/layout.html", "templates/"+name))
+	for _, name := range []string{"scenarios.html", "scenario.html", "issues.html", "issue_new.html", "issue.html"} {
+		pages[name] = template.Must(template.New("").Funcs(funcs).ParseFS(templateFS, "templates/layout.html", "templates/_*.html", "templates/"+name))
 	}
 }
 
@@ -48,6 +48,12 @@ func Handler(s *store.Store) http.Handler {
 	mux.HandleFunc("GET /scenarios/{id}", srv.scenarioPage)
 	mux.HandleFunc("PUT /scenarios/{id}/outline", srv.saveOutline)
 	mux.HandleFunc("POST /steps/{id}/status", srv.setStepStatus)
+	mux.HandleFunc("GET /issues", srv.issueList)
+	mux.HandleFunc("GET /issues/new", srv.issueNew)
+	mux.HandleFunc("POST /issues", srv.issueCreate)
+	mux.HandleFunc("GET /issues/{id}", srv.issuePage)
+	mux.HandleFunc("POST /issues/{id}", srv.issueUpdate)
+	mux.HandleFunc("POST /issues/{id}/notes", srv.addNote)
 	return mux
 }
 
@@ -187,7 +193,19 @@ func (srv *server) scenarioPage(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
+	people, err := srv.store.People()
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	packages, err := srv.store.Packages()
+	if err != nil {
+		fail(w, err)
+		return
+	}
 	srv.render(w, "scenario.html", map[string]any{
+		"People":       people,
+		"Packages":     packages,
 		"Scenario":     sc,
 		"Map":          railmap.Render(railmap.Input{Tree: tree, Unresolved: unresolved, StaleDays: staleDays, Now: time.Now()}),
 		"Outline":      outline.Format(store.ToOutline(tree)),

@@ -18,6 +18,12 @@
   .tabs button.active { background: #fff; border-bottom-color: #fff; }
   .tab { border: 1px solid #ccc; margin-top: -1px; padding: 1rem; }
   .tab.hidden { display: none; }
+  .badge { display: inline-block; font-size: .7em; padding: .1rem .5rem; border: 1px solid #999; border-radius: .5rem; vertical-align: middle; background: #f3f4f6; }
+  .badge.blocked { background: #D9363E; color: #fff; border-color: #D9363E; }
+  .cols { display: flex; gap: 2rem; flex-wrap: wrap; }
+  .cols > section { flex: 1 1 28rem; }
+  .filters label { display: inline-block; margin-right: 1rem; }
+  fieldset { margin-bottom: .5rem; }
 </style>
 </head>
 <body>
@@ -25,5 +31,7 @@
 <main>
 {{template "content" .}}
 </main>
+{{with .People}}<datalist id="people">{{range .}}<option value="{{.}}">{{end}}</datalist>{{end}}
+{{with .Packages}}<datalist id="packages">{{range .}}<option value="{{.}}">{{end}}</datalist>{{end}}
 </body>
 </html>{{end}}
