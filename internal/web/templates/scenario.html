@@ -1,68 +1,152 @@
 {{define "title"}}{{.Scenario.Name}}{{end}}
 {{define "content"}}
-<h1>{{.Scenario.Name}}</h1>
-{{if .Scenario.Description}}<p>{{.Scenario.Description}}</p>{{end}}
-
-<div class="tabs">
-  <button type="button" class="active" data-tab="map">노선도</button>
-  <button type="button" data-tab="edit">편집</button>
+<div class="crumb"><a href="/">시나리오</a> / {{.Scenario.Name}}</div>
+<div class="page-head">
+  <div>
+    <h1>{{.Scenario.Name}}</h1>
+    <p>{{if .Scenario.Description}}{{.Scenario.Description}} · {{end}}스텝 {{.Stat.Total}} · 블록 {{.Stat.Blocked}} · 테스트 필요 {{index .Stat.Counts "needs_test"}} · {{.StaleDays}}일 지난 확인 {{.Stat.Stale}}</p>
+  </div>
+  <div class="tabs" role="tablist">
+    <button type="button" class="active" data-tab="map">노선도</button>
+    <button type="button" data-tab="edit">편집</button>
+  </div>
 </div>
 
-<section id="tab-map" class="tab">
+<section id="tab-map" class="tab card railmap-wrap" aria-label="노선도">
   {{if .Steps}}
-  <div style="overflow-x: auto">{{.Map}}</div>
+  <div class="scroll-x">{{.Map}}</div>
+  <div id="popover" class="popover hidden" role="dialog"></div>
+  <p class="legend" style="border-top: 1px solid var(--border-soft); padding-top: 10px; margin-top: 6px">
+    {{range .StepStatuses}}<span><i{{if eq . "unchecked"}} class="unchecked"{{else}} style="background: {{index $.Colors .}}"{{end}}></i>{{stepLabel .}}</span>{{end}}
+    <span><i class="hatch"></i>상류 차단 (상위 블록이 풀리면 원래 색으로)</span>
+    <span><i class="dot" style="background: var(--blocked); width: 10px"></i>미해결 이슈 수 (빨강 = 블록 스텝)</span>
+  </p>
   {{else}}
-  <p>아직 스텝이 없습니다. 「편집」 탭에서 아웃라인을 입력하세요.</p>
+  <p class="muted">아직 스텝이 없습니다. 「편집」 탭에서 아웃라인을 입력하세요.</p>
   {{end}}
 </section>
 
-<section id="tab-edit" class="tab hidden">
-  <h2>아웃라인</h2>
-  <p>같은 깊이의 줄은 이어지는 스텝입니다. 스텝 아래에 들여쓴 <code>? 조건</code> 줄이 분기를 시작하고, 그 아래 더 들여쓴 줄이 분기의 스텝입니다. 줄 끝의 <code>[참조]</code>는 참조 칸에 들어갑니다.</p>
-  <form id="outline-form">
-    <textarea name="outline" rows="16">{{.Outline}}</textarea>
-    <label>변경자 <input name="actor"></label>
-    <button type="submit">저장</button>
-    <span id="outline-error" class="error"></span>
-  </form>
+<section id="tab-edit" class="tab hidden cols" aria-label="편집">
+  <div class="card pad stack">
+    <div class="row" style="justify-content: space-between"><h2>아웃라인</h2><small>같은 깊이의 줄은 이어지는 스텝 · 들여쓴 <code>? 조건</code> 줄이 분기 · 줄 끝 <code>[참조]</code></small></div>
+    <form id="outline-form" class="stack">
+      <textarea name="outline" rows="16" class="mono" aria-label="시나리오 아웃라인">{{.Outline}}</textarea>
+      <div class="row">
+        <button type="submit" class="btn primary">저장</button>
+        <label class="row" style="gap: 6px"><span class="muted">변경자</span><input name="actor" list="people" style="width: 10rem"></label>
+        <span id="outline-error" class="error"></span>
+        <small style="margin-left: auto">이름이 같은 스텝은 상태와 이슈 연결을 유지합니다. 지운 스텝의 이슈는 연결이 해제됩니다.</small>
+      </div>
+    </form>
+  </div>
 
   {{if .Steps}}
-  <h2>스텝 상태</h2>
-  <table>
-    <thead><tr><th>스텝</th><th>상태</th><th>확인 패키지</th><th>확인자</th><th>확인일</th><th></th></tr></thead>
-    <tbody>
-    {{range .Steps}}
-    <tr>
-      <td>{{.Name}}</td>
-      <td><select name="status" form="status-{{.ID}}">{{$cur := .Status}}{{range $.StepStatuses}}<option value="{{.}}"{{if eq . $cur}} selected{{end}}>{{stepLabel .}}</option>{{end}}</select></td>
-      <td><input name="checked_package" form="status-{{.ID}}" value="{{.CheckedPackage}}" list="packages"></td>
-      <td><input name="checked_by" form="status-{{.ID}}" value="{{.CheckedBy}}" list="people"></td>
-      <td>{{if .CheckedAt.Valid}}{{.CheckedTime.Format "2006-01-02"}}{{end}}</td>
-      <td><button type="submit" form="status-{{.ID}}">바꾸기</button></td>
-    </tr>
-    {{end}}
-    </tbody>
-  </table>
-  {{range .Steps}}<form id="status-{{.ID}}" method="post" action="/steps/{{.ID}}/status"></form>{{end}}
+  <div class="card pad stack">
+    <h2>스텝 상태 변경</h2>
+    <label class="field">스텝
+      <select id="step-select">{{range .Steps}}<option value="{{.ID}}">{{.Name}}</option>{{end}}</select>
+    </label>
+    <form id="status-form" method="post" class="stack">
+      <label class="field">상태
+        <select name="status" id="status-select">{{range .StepStatuses}}<option value="{{.}}">{{stepLabel .}}{{if eq . "blocked"}} (미해결 이슈 필요){{end}}</option>{{end}}</select>
+      </label>
+      <label class="field">확인 패키지 (지원으로 바꿀 때 필수)
+        <input name="checked_package" id="checked-package" list="packages">
+      </label>
+      <label class="field">확인자
+        <input name="checked_by" id="checked-by" list="people">
+      </label>
+      <div id="status-hint" class="note hidden"></div>
+      <div class="row"><button type="submit" class="btn primary">상태 저장</button><small id="step-meta"></small></div>
+    </form>
+  </div>
   {{end}}
 </section>
 
+<script id="step-data" type="application/json">{{json .StepData}}</script>
 <script>
-document.querySelectorAll('.tabs button').forEach(function (b) {
-  b.addEventListener('click', function () {
-    document.querySelectorAll('.tabs button').forEach(function (x) { x.classList.remove('active'); });
-    document.querySelectorAll('.tab').forEach(function (x) { x.classList.add('hidden'); });
-    b.classList.add('active');
-    document.getElementById('tab-' + b.dataset.tab).classList.remove('hidden');
+(function () {
+  var steps = JSON.parse(document.getElementById('step-data').textContent);
+  var byId = {};
+  steps.forEach(function (s) { byId[s.id] = s; });
+  var params = new URLSearchParams(location.search);
+
+  function showTab(name) {
+    document.querySelectorAll('.tabs button').forEach(function (x) { x.classList.toggle('active', x.dataset.tab === name); });
+    document.querySelectorAll('.tab').forEach(function (x) { x.classList.toggle('hidden', x.id !== 'tab-' + name); });
+  }
+  document.querySelectorAll('.tabs button').forEach(function (b) {
+    b.addEventListener('click', function () { showTab(b.dataset.tab); });
   });
-});
-document.getElementById('outline-form').addEventListener('submit', function (e) {
-  e.preventDefault();
-  fetch('/scenarios/{{.Scenario.ID}}/outline', { method: 'PUT', body: new URLSearchParams(new FormData(e.target)) })
-    .then(function (r) {
-      if (r.ok) { location.reload(); return; }
-      r.text().then(function (t) { document.getElementById('outline-error').textContent = t; });
-    });
-});
+
+  document.getElementById('outline-form').addEventListener('submit', function (e) {
+    e.preventDefault();
+    fetch('/scenarios/{{.Scenario.ID}}/outline', { method: 'PUT', body: new URLSearchParams(new FormData(e.target)) })
+      .then(function (r) {
+        if (r.ok) { location.href = location.pathname + '?tab=edit'; return; }
+        r.text().then(function (t) { document.getElementById('outline-error').textContent = t; });
+      });
+  });
+
+  var select = document.getElementById('step-select');
+  function selectStep(id) {
+    var s = byId[id];
+    if (!s) { return; }
+    select.value = id;
+    var form = document.getElementById('status-form');
+    form.action = '/steps/' + id + '/status';
+    document.getElementById('status-select').value = s.status;
+    document.getElementById('checked-package').value = s.checkedPackage;
+    document.getElementById('checked-by').value = s.checkedBy;
+    document.getElementById('step-meta').textContent = s.checkedAt ? '마지막 확인 ' + s.checkedAt + (s.checkedBy ? ' · ' + s.checkedBy : '') : '아직 확인한 적 없음';
+    var fixed = s.issues.filter(function (i) { return i.status === 'fixed'; });
+    var hint = document.getElementById('status-hint');
+    if (fixed.length) {
+      hint.textContent = '지원으로 바꾸면 연결된 조치 완료 이슈 ' + fixed.map(function (i) { return '#' + i.id; }).join(', ') + '가 검증 완료로 바뀝니다(연결된 모든 스텝이 지원일 때).';
+      hint.classList.remove('hidden');
+    } else {
+      hint.classList.add('hidden');
+    }
+  }
+  if (select) {
+    select.addEventListener('change', function () { selectStep(Number(select.value)); });
+    selectStep(Number(params.get('step')) || steps[0].id);
+  }
+  if (params.get('tab') === 'edit') { showTab('edit'); }
+
+  var pop = document.getElementById('popover');
+  var wrap = document.getElementById('tab-map');
+  function esc(t) { return t.replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function showPopover(g) {
+    var s = byId[Number(g.dataset.stepId)];
+    if (!s) { return; }
+    var colors = {{json .Colors}};
+    var meta = s.checkedAt ? '마지막 확인 ' + s.checkedAt + (s.checkedPackage ? ' ' + esc(s.checkedPackage) : '') + (s.checkedBy ? ' · ' + esc(s.checkedBy) : '') : '아직 확인한 적 없음';
+    var html = '<div class="title"><span class="dot" style="background:' + (colors[s.status] || '#fff') + ';' + (s.status === 'unchecked' ? 'border:1px solid #B9BEC5' : '') + '"></span>' + esc(s.name) + ' · ' + esc(s.statusLabel) + '</div>'
+      + '<div class="muted">' + meta + '</div>'
+      + (s.refs ? '<div class="muted">참조 ' + esc(s.refs) + '</div>' : '');
+    if (s.issues.length) {
+      html += '<div class="issues">' + s.issues.map(function (i) {
+        var cls = i.priority === 'P1' ? 'red' : i.priority === 'P2' ? 'yellow' : '';
+        return '<a href="/issues/' + i.id + '"><span class="badge ' + cls + '">' + esc(i.priority) + '</span><span>#' + i.id + ' ' + esc(i.title) + '</span></a>';
+      }).join('') + '</div>';
+    }
+    html += '<div class="actions"><a href="/issues/new?step=' + s.id + '">+ 이슈 등록</a><a href="?tab=edit&step=' + s.id + '">상태 변경</a>'
+      + (s.issues.length ? '<a href="/issues?step=' + s.id + '">이슈 목록</a>' : '') + '</div>';
+    pop.innerHTML = html;
+    pop.classList.remove('hidden');
+    var r = g.querySelector('circle').getBoundingClientRect();
+    var w = wrap.getBoundingClientRect();
+    var left = r.left - w.left + 20;
+    if (left + 270 > wrap.clientWidth) { left = Math.max(8, r.left - w.left - 280); }
+    pop.style.left = left + 'px';
+    pop.style.top = (r.top - w.top + 20) + 'px';
+  }
+  document.querySelectorAll('g.step').forEach(function (g) {
+    g.addEventListener('click', function (e) { if (e.target.closest('a')) { return; } e.stopPropagation(); showPopover(g); });
+    g.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); showPopover(g); } });
+  });
+  document.addEventListener('click', function (e) { if (pop && !pop.contains(e.target)) { pop.classList.add('hidden'); } });
+})();
 </script>
 {{end}}

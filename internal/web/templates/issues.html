@@ -1,34 +1,44 @@
 {{define "title"}}이슈 목록{{end}}
 {{define "content"}}
-<h1>이슈 목록</h1>
-<form method="get" action="/issues" class="filters">
-  <label>처리 상태 <select name="status"><option value="">전체</option>{{$f := .Filter}}{{range .IssueStatuses}}<option value="{{.}}"{{if eq . $f.Status}} selected{{end}}>{{issueLabel .}}</option>{{end}}</select></label>
-  <label>담당자 <select name="assignee"><option value="">전체</option>{{range .People}}<option value="{{.}}"{{if eq . $f.Assignee}} selected{{end}}>{{.}}</option>{{end}}</select></label>
-  <label>블록 여부 <select name="blocked"><option value="">전체</option><option value="1"{{if eq $f.Blocked "1"}} selected{{end}}>블록</option><option value="0"{{if eq $f.Blocked "0"}} selected{{end}}>블록 아님</option></select></label>
-  <label>시나리오 <select name="scenario"><option value="">전체</option>{{range .Scenarios}}<option value="{{.ID}}"{{if eq .ID $f.ScenarioID}} selected{{end}}>{{.Name}}</option>{{end}}</select></label>
-  <label>스텝 <select name="step"><option value="">전체</option>{{range .Groups}}{{range .Steps}}<option value="{{.ID}}"{{if eq .ID $f.StepID}} selected{{end}}>{{.Name}}</option>{{end}}{{end}}</select></label>
-  <button type="submit">필터</button>
-  <a href="/issues">초기화</a>
+<div class="page-head">
+  <div>
+    <h1>이슈</h1>
+    <p>블록 → 긴급도 → 목표 기한 순. 미해결 {{.Open}} · 블록 {{.BlockedCount}}</p>
+  </div>
+  <a href="/issues/new{{with .FilterStep}}?step={{.ID}}{{end}}" class="btn primary lg">+ 이슈 등록</a>
+</div>
+
+<form method="get" action="/issues" class="row" id="filters">
+  {{range .Chips}}<span class="chip">{{.Label}} <a href="{{.Remove}}" aria-label="{{.Label}} 필터 해제">×</a></span>{{end}}
+  {{$f := .Filter}}
+  <select name="status" aria-label="처리 상태"><option value="">상태: 전부</option>{{range .IssueStatuses}}<option value="{{.}}"{{if eq . $f.Status}} selected{{end}}>{{issueLabel .}}</option>{{end}}</select>
+  <select name="assignee" aria-label="담당자"><option value="">담당자: 전부</option>{{range .People}}<option value="{{.}}"{{if eq . $f.Assignee}} selected{{end}}>{{.}}</option>{{end}}</select>
+  <select name="scenario" aria-label="시나리오"><option value="">시나리오: 전부</option>{{range .Scenarios}}<option value="{{.ID}}"{{if eq .ID $f.ScenarioID}} selected{{end}}>{{.Name}}</option>{{end}}</select>
+  <select name="step" aria-label="스텝"><option value="">스텝: 전부</option>{{range .Groups}}{{$sc := .Name}}{{range .Steps}}<option value="{{.ID}}"{{if eq .ID $f.StepID}} selected{{end}}>{{$sc}} › {{.Name}}</option>{{end}}{{end}}</select>
+  <label class="row" style="gap: 6px"><input type="checkbox" name="blocked" value="1"{{if eq $f.Blocked "1"}} checked{{end}}> 블록만</label>
+  <button type="submit" class="btn">적용</button>
 </form>
-{{with .FilterStep}}<p>스텝 「{{.Name}}」의 이슈입니다. <a href="/issues/new?step={{.ID}}">이 스텝에 이슈 등록</a></p>{{end}}
-<p><a href="/issues/new">새 이슈 등록</a></p>
-{{if .Issues}}
-<table>
-  <thead><tr><th>블록</th><th>긴급도</th><th>목표 기한</th><th>제목</th><th>연결 스텝</th><th>처리 상태</th><th>담당자</th><th>발견 패키지</th></tr></thead>
-  <tbody>
-  {{range .Issues}}
-  <tr>
-    <td>{{if .Blocked}}<span class="badge blocked">블록</span>{{end}}</td>
-    <td>{{.Priority}}</td>
-    <td>{{.DueDate}}</td>
-    <td><a href="/issues/{{.ID}}">#{{.ID}} {{.Title}}</a></td>
-    <td>{{range .Steps}}{{.ScenarioName}} › {{.StepName}}<br>{{end}}</td>
-    <td>{{issueLabel .Status}}</td>
-    <td>{{.Assignee}}</td>
-    <td>{{.FoundPackage}}</td>
-  </tr>
-  {{end}}
-  </tbody>
-</table>
-{{else}}<p>이슈가 없습니다.</p>{{end}}
+
+<section class="card scroll-x" aria-label="이슈 목록">
+  <table class="list" style="min-width: 1000px">
+    <thead><tr><th>번호</th><th>블록</th><th>긴급</th><th>제목</th><th>연결 스텝</th><th>상태</th><th>담당자</th><th>목표 기한</th><th>발견 패키지</th></tr></thead>
+    <tbody>
+    {{range .Issues}}
+    <tr class="link-row">
+      <td class="muted">#{{.ID}}</td>
+      <td><span class="dot" style="background: {{if .Blocked}}var(--blocked){{else}}#E8EAED{{end}}" aria-label="{{if .Blocked}}블록{{else}}블록 아님{{end}}"></span></td>
+      <td><span class="badge {{priorityClass .Priority}}">{{.Priority}}</span></td>
+      <td><a href="/issues/{{.ID}}" style="color: inherit; font-weight: 500">{{.Title}}</a></td>
+      <td style="color: #444B55">{{range .Steps}}{{.ScenarioName}} › {{.StepName}}<br>{{end}}</td>
+      <td><span class="pill {{statusClass .Status}}">{{issueLabel .Status}}</span></td>
+      <td>{{if .Assignee}}{{.Assignee}}{{else}}<span class="faint">미배정</span>{{end}}</td>
+      <td{{if .DueSoon}} style="color: var(--red-text); font-weight: 700"{{end}}>{{if .DueDate}}{{.DueDate}}{{else}}<span class="faint">—</span>{{end}}</td>
+      <td class="muted">{{.FoundPackage}}</td>
+    </tr>
+    {{else}}
+    <tr><td colspan="9" class="muted">조건에 맞는 이슈가 없습니다.</td></tr>
+    {{end}}
+    </tbody>
+  </table>
+</section>
 {{end}}

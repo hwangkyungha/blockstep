@@ -495,3 +495,33 @@ func (s *Store) queryStrings(query string) ([]string, error) {
 	}
 	return list, rows.Err()
 }
+
+// IssueBrief는 노선도 팝오버와 상태 변경 폼에 보여 줄 이슈 요약이다.
+type IssueBrief struct {
+	ID       int64  `json:"id"`
+	Title    string `json:"title"`
+	Priority string `json:"priority"`
+	Status   string `json:"status"`
+}
+
+// StepIssues는 시나리오의 스텝 id별로 검증 완료·거절이 아닌 이슈를 돌려준다.
+// 조치 완료 이슈도 포함하므로, 미해결 수를 셀 때는 Status가 fixed가 아닌 것만 센다.
+func (s *Store) StepIssues(scenarioID int64) (map[int64][]IssueBrief, error) {
+	rows, err := s.db.Query(`SELECT js.step_id, i.id, i.title, i.priority, i.status FROM issue_step js
+		JOIN issue i ON i.id = js.issue_id JOIN step st ON st.id = js.step_id
+		WHERE st.scenario_id = ? AND i.status NOT IN ('verified', 'rejected') ORDER BY i.priority, i.id`, scenarioID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[int64][]IssueBrief{}
+	for rows.Next() {
+		var sid int64
+		var b IssueBrief
+		if err := rows.Scan(&sid, &b.ID, &b.Title, &b.Priority, &b.Status); err != nil {
+			return nil, err
+		}
+		out[sid] = append(out[sid], b)
+	}
+	return out, rows.Err()
+}

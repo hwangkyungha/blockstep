@@ -77,32 +77,33 @@ func TestRenderMarksUpstreamStaleAndBadges(t *testing.T) {
 	tree := []store.StepNode{node(1, "설치 실행", store.StepSupported, 0), node(2, "라이선스 확인", store.StepBlocked, 0),
 		node(3, "설정", store.StepSupported, 0), node(4, "아주아주아주아주아주 긴 스텝 이름은 두 줄로 접는다", store.StepUnchecked, 0)}
 	tree[0].CheckedAt = sql.NullString{String: old, Valid: true}
+	tree[0].CheckedPackage = "2026-10-09 #101"
 	tree[2].CheckedAt = sql.NullString{String: recent, Valid: true}
 	tree[1].Branches = []store.BranchNode{{Branch: store.Branch{ID: 10, Label: "라이선스 없음"},
 		Steps: []store.StepNode{node(11, "평가판", store.StepNeedsTest, 10)}}}
 	svg := string(Render(Input{Tree: tree, Unresolved: map[int64]int{2: 2, 3: 1}, StaleDays: 14, Now: now}))
 
 	checks := []string{
-		`2026-10-09 · 20일 지남`,                          // 14일 지난 지원 스텝
-		`class="step step-supported" data-step-id="3"`, // 상류 차단 아님 (블록 스텝 앞)
+		`class="stale">확인 2026-10-09 #101</text>`, // 14일 지난 지원 스텝: 확인일과 패키지
+		`class="stale">20일 지남</text>`,
+		`class="step step-supported" data-step-id="3"`, // 블록 스텝 뒤라 상류 차단이어야 한다 (포함되면 안 됨)
 		`class="step step-supported upstream-blocked" data-step-id="3"`,
 		`class="step step-needs_test upstream-blocked" data-step-id="11"`,
-		`fill="url(#hatch)"`,
-		`<a href="/issues?step=2"><circle cx="243" cy="27" r="9" fill="#D9363E"/>`,
-		`<a href="/issues?step=3"><circle cx="393" cy="27" r="9" fill="#8A8F98"/>`,
-		`>라이선스 없음</text>`,
-		`>아주아주아주아주아주 </text>`,
-		`>긴 스텝 이름은 두…</text>`,
-		`stroke="#D9363E" stroke-width="8"`, // 블록 스텝에 이르는 구간
+		`stroke="url(#hatch)"`,
+		`>상류 차단 · 확인 10-26</text>`,
+		`<a href="/issues?step=2"><circle cx="305" cy="35" r="9" fill="#D9363E"/>`,
+		`<a href="/issues?step=3"><circle cx="485" cy="35" r="9" fill="#8A919A"/>`,
+		`>? 라이선스 없음</text>`,
+		`>아주아주아주아주아주 긴</text>`,
+		`>스텝 이름은 두 줄로…</text>`,
+		`fill="#D9363E" stroke="#D9363E" stroke-width="4"`, // 블록 스텝은 속까지 빨강
+		`stroke="#D9363E" stroke-width="10" stroke-linecap="round"`,
 	}
 	for i, c := range checks {
 		want := !strings.Contains(c, `step-supported" data-step-id="3"`)
 		if strings.Contains(svg, c) != want {
 			t.Errorf("%d: %q 포함 = %v, want %v\n%s", i, c, !want, want, svg)
 		}
-	}
-	if strings.Contains(svg, "2026-10-26 ·") {
-		t.Errorf("3일 지난 스텝에 지남 표시가 붙었다")
 	}
 	if Render(Input{}) != "" {
 		t.Errorf("빈 트리는 빈 문자열이어야 한다")

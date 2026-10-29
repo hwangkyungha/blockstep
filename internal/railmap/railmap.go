@@ -16,11 +16,12 @@ import (
 )
 
 const (
-	colW    = 150 // 스텝 사이 가로 간격
-	rowH    = 120 // 본선과 분기 사이 세로 간격
-	marginX = 80
-	marginY = 40
-	radius  = 11
+	colW    = 180 // 스텝 사이 가로 간격
+	rowH    = 130 // 본선과 분기 사이 세로 간격
+	marginX = 110
+	marginY = 50
+	radius  = 12
+	lineW   = 10
 )
 
 // Color는 상태별 색이다. 미확인은 흰색 바탕에 테두리만 그린다.
@@ -30,6 +31,14 @@ var Color = map[string]string{
 	store.StepNeedsTest:      "#E0A106",
 	store.StepNotImplemented: "#B9BEC5",
 	store.StepUnchecked:      "#FFFFFF",
+}
+
+// strokeColor는 선과 테두리에 쓰는 색이다. 미확인은 흰색이라 연한 회색으로 그린다.
+func strokeColor(status string) string {
+	if status == store.StepUnchecked {
+		return "#B9BEC5"
+	}
+	return Color[status]
 }
 
 // Input은 노선도를 그리는 데 필요한 값이다.
@@ -147,66 +156,88 @@ func Render(in Input) template.HTML {
 	var b strings.Builder
 	width := x(l.maxCol) + colW
 	height := y(l.maxRow) + rowH
-	fmt.Fprintf(&b, `<svg class="railmap" xmlns="http://www.w3.org/2000/svg" width="%d" height="%d" viewBox="0 0 %d %d" font-family="sans-serif" font-size="12">`, width, height, width, height)
-	b.WriteString(`<defs><pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" stroke="#555" stroke-width="1.5"/></pattern></defs>`)
+	fmt.Fprintf(&b, `<svg class="railmap" xmlns="http://www.w3.org/2000/svg" width="%d" height="%d" viewBox="0 0 %d %d" font-family="'Noto Sans KR', system-ui, sans-serif" font-size="13">`, width, height, width, height)
+	b.WriteString(`<defs><pattern id="hatch" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="8" stroke="#FFFFFF" stroke-width="4"/></pattern></defs>`)
 
 	// 구간 선. 같은 행에서 앞 스텝과 잇는다. 행의 첫 스텝은 분기 선이 맡고, 본선의 첫 스텝은 짧은 시작 선을 둔다.
 	prevInRow := map[cell]*placed{}
 	for _, p := range l.steps {
 		if prev, ok := prevInRow[cell{p.row, p.col - 1}]; ok && sameList(prev, p) {
-			fmt.Fprintf(&b, `<line x1="%d" y1="%d" x2="%d" y2="%d" stroke="%s" stroke-width="8"/>`,
-				x(prev.col), y(prev.row), x(p.col), y(p.row), lineColor(p))
+			segment(&b, fmt.Sprintf(`M%d %d H%d`, x(prev.col), y(prev.row), x(p.col)), p)
 		} else if p.row == 0 && p.col == 0 {
-			fmt.Fprintf(&b, `<line x1="%d" y1="%d" x2="%d" y2="%d" stroke="%s" stroke-width="8"/>`,
-				x(0)-30, y(0), x(0), y(0), lineColor(p))
+			segment(&b, fmt.Sprintf(`M%d %d H%d`, x(0)-36, y(0), x(0)), p)
 		}
 		prevInRow[cell{p.row, p.col}] = p
 	}
 	for _, br := range l.branches {
 		fx, fy := x(br.from.col), y(br.from.row)
 		tx, ty := x(br.first.col), y(br.first.row)
-		fmt.Fprintf(&b, `<path d="M%d %d V%d Q%d %d %d %d H%d" fill="none" stroke="%s" stroke-width="8" stroke-linejoin="round"/>`,
-			fx, fy, ty-16, fx, ty, fx+16, ty, tx, lineColor(br.first))
-		fmt.Fprintf(&b, `<text x="%d" y="%d" fill="#444" font-size="11">%s</text>`,
-			fx+8, fy+78+br.index*14, html.EscapeString(br.label))
+		segment(&b, fmt.Sprintf(`M%d %d V%d Q%d %d %d %d H%d`, fx, fy, ty-18, fx, ty, fx+18, ty, tx), br.first)
+		label := "? " + br.label
+		lw := textWidth(label) + 16
+		ly := fy + 82 + br.index*24
+		fmt.Fprintf(&b, `<g class="branch-label"><rect x="%d" y="%d" width="%d" height="20" rx="4" fill="#FFFFFF" stroke="#D0D4DA"/><text x="%d" y="%d" fill="#444B55" font-size="12">%s</text></g>`,
+			fx+12, ly, lw, fx+20, ly+14, html.EscapeString(label))
 	}
 
 	for _, p := range l.steps {
 		st := p.node
 		cx, cy := x(p.col), y(p.row)
-		fill, stroke := Color[st.Status], "#333"
-		if st.Status == store.StepUnchecked {
-			stroke = "#888"
+		stroke := strokeColor(st.Status)
+		fill := "#FFFFFF"
+		if st.Status == store.StepBlocked {
+			fill = Color[store.StepBlocked]
 		}
-		fmt.Fprintf(&b, `<g class="step step-%s%s" data-step-id="%d"><title>%s</title>`, st.Status, ternary(p.upstream, " upstream-blocked", ""), st.ID, html.EscapeString(st.Name))
+		fmt.Fprintf(&b, `<g class="step step-%s%s" data-step-id="%d" tabindex="0" role="button"><title>%s</title>`,
+			st.Status, ternary(p.upstream, " upstream-blocked", ""), st.ID, html.EscapeString(st.Name))
+		opacity := ""
 		if p.upstream {
-			fmt.Fprintf(&b, `<circle cx="%d" cy="%d" r="%d" fill="%s" fill-opacity="0.35" stroke="%s" stroke-width="2"/>`, cx, cy, radius, fill, stroke)
-			fmt.Fprintf(&b, `<circle cx="%d" cy="%d" r="%d" fill="url(#hatch)" stroke="none"/>`, cx, cy, radius)
-		} else {
-			fmt.Fprintf(&b, `<circle cx="%d" cy="%d" r="%d" fill="%s" stroke="%s" stroke-width="2"/>`, cx, cy, radius, fill, stroke)
+			opacity = ` opacity="0.55"`
 		}
-		lines := wrap(st.Name, 11)
+		fmt.Fprintf(&b, `<circle cx="%d" cy="%d" r="%d" fill="%s" stroke="%s" stroke-width="4"%s/>`, cx, cy, radius, fill, stroke, opacity)
+
+		nameFill, nameWeight := "#1F2328", "500"
+		switch {
+		case p.upstream:
+			nameFill = "#8A919A"
+		case st.Status == store.StepBlocked:
+			nameFill, nameWeight = "#B5252C", "700"
+		case st.Status == store.StepNeedsTest:
+			nameFill = "#8A6200"
+		}
+		lines := wrap(st.Name, 12)
 		for i, line := range lines {
-			fmt.Fprintf(&b, `<text x="%d" y="%d" text-anchor="middle" fill="#222">%s</text>`, cx, cy+28+i*14, html.EscapeString(line))
+			fmt.Fprintf(&b, `<text x="%d" y="%d" text-anchor="middle" fill="%s" font-weight="%s">%s</text>`, cx, cy+32+i*17, nameFill, nameWeight, html.EscapeString(line))
 		}
-		if st.CheckedAt.Valid {
-			dy := cy + 30 + len(lines)*14
-			t := st.CheckedTime()
-			days := int(in.Now.Sub(t).Hours() / 24)
-			if st.Status == store.StepSupported && days >= in.StaleDays {
-				fmt.Fprintf(&b, `<text x="%d" y="%d" text-anchor="middle" fill="#D9363E" font-weight="bold" font-size="11" class="stale">%s · %d일 지남</text>`,
-					cx, dy, t.Format("2006-01-02"), days)
-			} else {
-				fmt.Fprintf(&b, `<text x="%d" y="%d" text-anchor="middle" fill="#666" font-size="11">%s</text>`, cx, dy, t.Format("2006-01-02"))
+		dy := cy + 32 + len(lines)*17
+		sub, stale := subline(st, p.upstream, in)
+		if stale != "" {
+			// 확인일은 굵은 빨강, 「N일 지남」은 연빨강 칩으로 강조한다.
+			w1, w2 := textWidth(sub), textWidth(stale)+10
+			total := w1 + 4 + w2
+			left := cx - total/2
+			fmt.Fprintf(&b, `<text x="%d" y="%d" fill="#B5252C" font-weight="700" font-size="11" class="stale">%s</text>`, left, dy, html.EscapeString(sub))
+			fmt.Fprintf(&b, `<rect x="%d" y="%d" width="%d" height="16" rx="3" fill="#FDE8E9"/><text x="%d" y="%d" fill="#B5252C" font-weight="700" font-size="11" class="stale">%s</text>`,
+				left+w1+4, dy-12, w2, left+w1+9, dy, html.EscapeString(stale))
+		} else if sub != "" {
+			subFill := "#5A616B"
+			switch {
+			case p.upstream:
+				subFill = "#8A919A"
+			case st.Status == store.StepBlocked:
+				subFill = "#B5252C"
+			case st.Status == store.StepNeedsTest:
+				subFill = "#8A6200"
 			}
+			fmt.Fprintf(&b, `<text x="%d" y="%d" text-anchor="middle" fill="%s" font-size="11">%s</text>`, cx, dy, subFill, html.EscapeString(sub))
 		}
 		if n := in.Unresolved[st.ID]; n > 0 {
-			color := "#8A8F98"
+			color := "#8A919A"
 			if st.Status == store.StepBlocked {
 				color = "#D9363E"
 			}
-			fmt.Fprintf(&b, `<a href="/issues?step=%d"><circle cx="%d" cy="%d" r="9" fill="%s"/><text x="%d" y="%d" text-anchor="middle" fill="#fff" font-size="11" font-weight="bold">%d</text></a>`,
-				st.ID, cx+13, cy-13, color, cx+13, cy-9, n)
+			fmt.Fprintf(&b, `<a href="/issues?step=%d"><circle cx="%d" cy="%d" r="9" fill="%s"/><text x="%d" y="%d" text-anchor="middle" fill="#fff" font-size="11" font-weight="700">%d</text></a>`,
+				st.ID, cx+15, cy-15, color, cx+15, cy-11, n)
 		}
 		b.WriteString(`</g>`)
 	}
@@ -214,30 +245,84 @@ func Render(in Input) template.HTML {
 	return template.HTML(b.String())
 }
 
+// segment는 스텝 p에 이르는 구간을 그린다. 상류 차단이면 연하게 칠하고 흰 빗금을 덧그린다.
+func segment(b *strings.Builder, d string, p *placed) {
+	color := strokeColor(p.node.Status)
+	if p.node.Status == store.StepUnchecked {
+		fmt.Fprintf(b, `<path d="%s" fill="none" stroke="#B9BEC5" stroke-width="%d" stroke-linecap="round"/><path d="%s" fill="none" stroke="#FFFFFF" stroke-width="%d" stroke-linecap="round"/>`, d, lineW, d, lineW-3)
+		return
+	}
+	if p.upstream {
+		fmt.Fprintf(b, `<path d="%s" fill="none" stroke="%s" stroke-width="%d" stroke-linecap="round" opacity="0.55"/><path d="%s" fill="none" stroke="url(#hatch)" stroke-width="%d" stroke-linecap="round" class="hatch"/>`, d, color, lineW, d, lineW)
+		return
+	}
+	fmt.Fprintf(b, `<path d="%s" fill="none" stroke="%s" stroke-width="%d" stroke-linecap="round"/>`, d, color, lineW)
+}
+
+// subline은 스텝 이름 아래 줄의 글과, 확인일이 오래되었을 때의 「N일 지남」 글을 돌려준다.
+func subline(st *store.StepNode, upstream bool, in Input) (string, string) {
+	var parts []string
+	if upstream {
+		parts = append(parts, "상류 차단")
+	}
+	if st.Status == store.StepBlocked || st.Status == store.StepNeedsTest || st.Status == store.StepNotImplemented {
+		parts = append(parts, store.StepStatusLabel[st.Status])
+	}
+	if st.CheckedAt.Valid {
+		t := st.CheckedTime()
+		// 확인 패키지가 있으면 그것을, 없으면 확인일을 보여 준다.
+		checked := "확인 " + t.Format("01-02")
+		if st.CheckedPackage != "" {
+			checked = "확인 " + st.CheckedPackage
+		}
+		days := int(in.Now.Sub(t).Hours() / 24)
+		if st.Status == store.StepSupported && !upstream && days >= in.StaleDays {
+			return checked, fmt.Sprintf("%d일 지남", days)
+		}
+		parts = append(parts, checked)
+	} else if len(parts) == 0 && st.Status == store.StepUnchecked {
+		parts = append(parts, "미확인")
+	}
+	return strings.Join(parts, " · "), ""
+}
+
 // sameList는 두 스텝이 같은 본선 또는 같은 분기에 속하는지 본다.
 func sameList(a, b *placed) bool {
 	return a.node.ParentBranchID == b.node.ParentBranchID
 }
 
-// lineColor는 스텝에 이르는 구간의 색이다. 미확인은 흰색이라 선에는 회색을 쓴다.
-func lineColor(p *placed) string {
-	if p.node.Status == store.StepUnchecked {
-		return "#D5D8DC"
+// textWidth는 글 너비를 어림한다. 한글은 11px, 그 밖의 글자는 6.5px로 본다.
+func textWidth(s string) int {
+	w := 0.0
+	for _, r := range s {
+		if r > 0x2E80 {
+			w += 11
+		} else {
+			w += 6.5
+		}
 	}
-	return Color[p.node.Status]
+	return int(w)
 }
 
-// wrap은 이름을 n글자씩 최대 두 줄로 나눈다. 두 줄을 넘는 부분은 줄임표로 줄인다.
+// wrap은 이름을 최대 두 줄로 나눈다. n글자 안에 띄어쓰기가 있으면 거기서 끊고, 없으면 n글자에서 끊는다.
+// 두 줄을 넘는 부분은 줄임표로 줄인다.
 func wrap(s string, n int) []string {
 	r := []rune(s)
 	if len(r) <= n {
 		return []string{s}
 	}
-	rest := r[n:]
+	cut, next := n, n
+	for i := n; i > 0; i-- {
+		if r[i] == ' ' {
+			cut, next = i, i+1
+			break
+		}
+	}
+	rest := r[next:]
 	if len(rest) > n {
 		rest = append(rest[:n-1:n-1], '…')
 	}
-	return []string{string(r[:n]), string(rest)}
+	return []string{string(r[:cut]), string(rest)}
 }
 
 func ternary(c bool, a, b string) string {

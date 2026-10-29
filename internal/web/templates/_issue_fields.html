@@ -1,24 +1,25 @@
 {{define "issue_fields"}}
-<label>제목 <input name="title" value="{{.Issue.Title}}" required style="width: 30rem"></label>
+<label class="field">제목 <input name="title" value="{{.Issue.Title}}" required></label>
 <fieldset>
   <legend>연결 스텝 (하나 이상)</legend>
+  <div class="stack" style="gap: 8px">
   {{range .Groups}}{{if .Steps}}
-  <div><strong>{{.Name}}</strong><br>
-  {{$checked := $.Checked}}{{range .Steps}}<label style="display: inline-block; margin-right: 1rem"><input type="checkbox" name="step_ids" value="{{.ID}}"{{if index $checked .ID}} checked{{end}}> {{.Name}} <small>({{stepLabel .Status}})</small></label>{{end}}
+  <div><div class="muted" style="margin-bottom: 4px">{{.Name}}</div>
+  <div class="check-list">{{$checked := $.Checked}}{{range .Steps}}<label><input type="checkbox" name="step_ids" value="{{.ID}}"{{if index $checked .ID}} checked{{end}}> {{.Name}} <small>({{stepLabel .Status}})</small></label>{{end}}</div>
   </div>
   {{end}}{{end}}
+  </div>
 </fieldset>
-<label>발견 패키지 <input name="found_package" value="{{.Issue.FoundPackage}}" list="packages" required></label>
-<label>설명 (재현 방법과 증상)<br><textarea name="description" rows="5" required>{{.Issue.Description}}</textarea></label>
-<label>리포터 <input name="reporter" value="{{.Issue.Reporter}}" list="people" required> <small>목록에 없는 이름을 적으면 사람 목록에 추가됩니다</small></label>
-<label>담당자 <input name="assignee" value="{{.Issue.Assignee}}" list="people"></label>
-<label>처리 상태 <select name="status">{{$cur := .Issue.Status}}{{range .IssueStatuses}}<option value="{{.}}"{{if eq . $cur}} selected{{end}}>{{issueLabel .}}</option>{{end}}</select></label>
-<label>긴급도 <select name="priority">{{$p := .Issue.Priority}}{{range .Priorities}}<option value="{{.}}"{{if eq . $p}} selected{{end}}>{{.}}</option>{{end}}</select> <small>P1 다음 패키지에 반드시 반영, P2 이번 주 안, P3 일정 없음</small></label>
-<label>목표 기한 <input type="date" name="due_date" value="{{.Issue.DueDate}}"></label>
-<label>Jira 키 <input name="jira_key" value="{{.Issue.JiraKey}}" placeholder="CT2612-405"></label>
-<fieldset>
-  <legend>조치 완료로 바꿀 때 필수</legend>
-  <label>반영 패키지 <input name="applied_package" value="{{.Issue.AppliedPackage}}" list="packages"></label>
-  <label>처리 후 내용 (새 바이너리 적용 방법, 바뀐 API, 설정 변경)<br><textarea name="resolution_note" rows="4">{{.Issue.ResolutionNote}}</textarea></label>
-</fieldset>
+<div class="form-grid">
+  <label class="field">발견 패키지 (필수) <input name="found_package" value="{{.Issue.FoundPackage}}" list="packages" required></label>
+  <label class="field">긴급도 <select name="priority">{{$p := .Issue.Priority}}{{range .Priorities}}<option value="{{.}}"{{if eq . $p}} selected{{end}}>{{.}}{{if eq . "P1"}} · 다음 패키지에 반드시 반영{{else if eq . "P2"}} · 이번 주 안{{else}} · 일정 없음{{end}}</option>{{end}}</select></label>
+  <label class="field wide">설명 (재현 방법과 증상) <textarea name="description" rows="5" required>{{.Issue.Description}}</textarea></label>
+  <label class="field">리포터 <input name="reporter" value="{{.Issue.Reporter}}" list="people" required placeholder="목록에 없는 이름을 적으면 추가됩니다"></label>
+  <label class="field">담당자 <input name="assignee" value="{{.Issue.Assignee}}" list="people"></label>
+  <label class="field">처리 상태 <select name="status">{{$cur := .Issue.Status}}{{range .IssueStatuses}}<option value="{{.}}"{{if eq . $cur}} selected{{end}}>{{issueLabel .}}</option>{{end}}</select></label>
+  <label class="field">목표 기한 <input type="date" name="due_date" value="{{.Issue.DueDate}}"></label>
+  <label class="field">Jira 키 <input name="jira_key" value="{{.Issue.JiraKey}}" placeholder="CT2612-405"></label>
+  <label class="field">반영 패키지 (조치 완료일 때 필수) <input name="applied_package" value="{{.Issue.AppliedPackage}}" list="packages"></label>
+  <label class="field wide">처리 후 내용 (조치 완료일 때 필수) · 새 바이너리 적용 방법, 바뀐 API, 설정 변경 <textarea name="resolution_note" rows="4">{{.Issue.ResolutionNote}}</textarea></label>
+</div>
 {{end}}

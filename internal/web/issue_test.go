@@ -33,17 +33,26 @@ func TestIssueCreateListDetail(t *testing.T) {
 	e.mustRedirect(rec, "/issues/1")
 
 	detail := e.get("/issues/1")
-	for _, want := range []string{"라이선스 서버 오류", "설치</a> › 라이선스 확인", "이슈 등록", `value="홍길동"`} {
+	for _, want := range []string{"라이선스 서버 오류", `>라이선스 확인</a>`, "설치 · 미확인", "이슈 등록", `<span class="badge red">P1</span>`, "조치 완료로 바꾸기"} {
 		if !strings.Contains(detail, want) {
 			t.Errorf("상세에 %q가 없다", want)
 		}
 	}
+	edit := e.get("/issues/1/edit")
+	if !strings.Contains(edit, `value="홍길동"`) || !strings.Contains(edit, `value="`+itoa(lic.ID)+`" checked`) {
+		t.Errorf("편집 화면에 값이 없다")
+	}
 
-	// 블록 스텝으로 바꾸면 목록과 상세에 블록 배지가 붙고, 스텝 필터가 동작한다.
+	// 블록 스텝으로 바꾸면 목록과 상세에 블록 표시가 붙고, 스텝 필터가 칩으로 보인다.
 	e.do("POST", "/steps/"+itoa(lic.ID)+"/status", url.Values{"status": {"blocked"}, "checked_by": {"홍길동"}})
 	list := e.get("/issues?step=" + itoa(lic.ID))
-	if !strings.Contains(list, `<span class="badge blocked">블록</span>`) || !strings.Contains(list, "스텝 「라이선스 확인」의 이슈") {
-		t.Errorf("목록:\n%s", list)
+	for _, want := range []string{`background: var(--blocked)`, `스텝: 라이선스 확인 <a href="/issues"`, `/issues/new?step=` + itoa(lic.ID)} {
+		if !strings.Contains(list, want) {
+			t.Errorf("목록에 %q가 없다", want)
+		}
+	}
+	if !strings.Contains(e.get("/issues/1"), `<span class="pill red">블록</span>`) {
+		t.Errorf("상세에 블록 표시가 없다")
 	}
 	if other := e.get("/issues?step=" + itoa(steps[0].ID)); strings.Contains(other, "라이선스 서버 오류") {
 		t.Errorf("다른 스텝 필터에 이슈가 보인다")
@@ -80,12 +89,59 @@ func TestIssueUpdateReleasesStepAndNotes(t *testing.T) {
 		t.Errorf("빈 기록 = %d", rec.Code)
 	}
 	detail := e.get("/issues/1")
-	for _, want := range []string{"원인 파악 중", "<td>status</td><td>open</td><td>fixed</td><td>김엔진</td>", `<option value="김엔진">`} {
+	for _, want := range []string{"원인 파악 중", "김엔진 · <b>status</b> open → fixed", `<option value="김엔진">`} {
 		if !strings.Contains(detail, want) {
 			t.Errorf("상세에 %q가 없다:\n%s", want, detail)
 		}
 	}
+	if strings.Contains(detail, "조치 완료로 바꾸기") {
+		t.Errorf("이미 조치 완료인데 조치 완료 폼이 보인다")
+	}
 	if rec := e.do("GET", "/issues/99", nil); rec.Code != http.StatusNotFound {
 		t.Errorf("없는 이슈 = %d", rec.Code)
+	}
+}
+
+func TestIssueFixAndStatusForms(t *testing.T) {
+	e := newEnv(t)
+	scID := e.newScenario("설치", "설치 실행\n라이선스 확인\n")
+	steps, _ := e.store.ScenarioSteps(scID)
+	lic := steps[1]
+	e.do("POST", "/issues", issueForm(lic.ID))
+	second := issueForm(lic.ID)
+	second.Set("title", "두 번째")
+	e.do("POST", "/issues", second)
+	e.do("POST", "/steps/"+itoa(lic.ID)+"/status", url.Values{"status": {"blocked"}, "checked_by": {"홍길동"}})
+
+	detail := e.get("/issues/1")
+	if !strings.Contains(detail, "미해결 이슈 #2가 남아 블록이 유지됩니다") {
+		t.Errorf("조치 완료 안내가 없다")
+	}
+
+	// 상태 바꾸기: 조치 완료는 거부, 그 밖의 상태는 바뀐다.
+	if rec := e.do("POST", "/issues/1/status", url.Values{"status": {"fixed"}}); rec.Code != http.StatusBadRequest {
+		t.Errorf("상태 폼으로 조치 완료 = %d", rec.Code)
+	}
+	e.mustRedirect(e.do("POST", "/issues/1/status", url.Values{"status": {"in_progress"}, "actor": {"김엔진"}}), "/issues/1")
+	issue, _ := e.store.GetIssue(1)
+	if issue.Status != store.IssueInProgress || len(issue.Steps) != 1 {
+		t.Errorf("이슈 = %+v", issue)
+	}
+
+	// 조치 완료 폼: 두 칸이 비면 거부, 적으면 조치 완료가 되고 다른 칸은 유지된다.
+	if rec := e.do("POST", "/issues/1/fix", url.Values{"applied_package": {"2026-10-30"}}); rec.Code != http.StatusBadRequest {
+		t.Errorf("처리 후 내용 없는 조치 완료 = %d", rec.Code)
+	}
+	e.mustRedirect(e.do("POST", "/issues/1/fix", url.Values{"applied_package": {"2026-10-30"}, "resolution_note": {"새 바이너리"}, "jira_key": {"CT2612-405"}}), "/issues/1")
+	issue, _ = e.store.GetIssue(1)
+	if issue.Status != store.IssueFixed || issue.Title != "라이선스 서버 오류" || issue.JiraKey != "CT2612-405" || issue.Priority != "P1" {
+		t.Errorf("이슈 = %+v", issue)
+	}
+	st, _ := e.store.GetStep(lic.ID)
+	if st.Status != store.StepBlocked {
+		t.Errorf("다른 미해결 이슈가 남았는데 블록이 풀렸다")
+	}
+	if !strings.Contains(e.get("/issues/2"), "미해결 이슈가 0이 되어 테스트 필요로 바뀌고") {
+		t.Errorf("마지막 이슈의 안내가 없다")
 	}
 }

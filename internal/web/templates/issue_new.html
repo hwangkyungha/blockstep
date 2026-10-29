@@ -1,8 +1,11 @@
 {{define "title"}}이슈 등록{{end}}
 {{define "content"}}
+<div class="crumb"><a href="/issues">이슈</a> / 등록</div>
 <h1>이슈 등록</h1>
-<form method="post" action="/issues">
+<section class="card pad">
+<form method="post" action="/issues" class="stack">
 {{template "issue_fields" .}}
-<button type="submit">등록</button>
+<div class="row"><button type="submit" class="btn primary">등록</button><a href="/issues" class="btn">취소</a></div>
 </form>
+</section>
 {{end}}

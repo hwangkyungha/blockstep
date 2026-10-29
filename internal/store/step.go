@@ -371,26 +371,6 @@ func (s *Store) ChangeLogs(entity string, entityID int64) ([]ChangeLog, error) {
 	return list, rows.Err()
 }
 
-// UnresolvedCounts는 시나리오의 스텝 id별 미해결 이슈 수를 돌려준다.
-func (s *Store) UnresolvedCounts(scenarioID int64) (map[int64]int, error) {
-	rows, err := s.db.Query(`SELECT js.step_id, COUNT(*) FROM issue_step js JOIN issue i ON i.id = js.issue_id JOIN step st ON st.id = js.step_id
-		WHERE st.scenario_id = ? AND `+unresolvedCondition+` GROUP BY js.step_id`, scenarioID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	counts := map[int64]int{}
-	for rows.Next() {
-		var id int64
-		var n int
-		if err := rows.Scan(&id, &n); err != nil {
-			return nil, err
-		}
-		counts[id] = n
-	}
-	return counts, rows.Err()
-}
-
 // StaleDays는 설정 stale_days를 돌려준다. 값이 숫자가 아니면 14이다.
 func (s *Store) StaleDays() (int, error) {
 	v, err := s.Setting("stale_days")

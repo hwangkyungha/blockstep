@@ -2,32 +2,21 @@
 <html lang="ko">
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Blockstep - {{template "title" .}}</title>
-<style>
-  body { font-family: sans-serif; margin: 0; color: #222; background: #fff; }
-  nav { background: #1f2933; padding: .6rem 2rem; }
-  nav a { color: #fff; margin-right: 1.5rem; text-decoration: none; font-weight: bold; }
-  main { padding: 1.5rem 2rem; }
-  table { border-collapse: collapse; }
-  th, td { border: 1px solid #ccc; padding: .4rem .8rem; text-align: left; vertical-align: top; }
-  label { display: block; margin-bottom: .5rem; }
-  input, textarea, select { font: inherit; }
-  textarea { width: 40rem; max-width: 100%; }
-  .error { color: #D9363E; }
-  .tabs button { font: inherit; padding: .4rem 1rem; border: 1px solid #ccc; background: #f3f4f6; cursor: pointer; }
-  .tabs button.active { background: #fff; border-bottom-color: #fff; }
-  .tab { border: 1px solid #ccc; margin-top: -1px; padding: 1rem; }
-  .tab.hidden { display: none; }
-  .badge { display: inline-block; font-size: .7em; padding: .1rem .5rem; border: 1px solid #999; border-radius: .5rem; vertical-align: middle; background: #f3f4f6; }
-  .badge.blocked { background: #D9363E; color: #fff; border-color: #D9363E; }
-  .cols { display: flex; gap: 2rem; flex-wrap: wrap; }
-  .cols > section { flex: 1 1 28rem; }
-  .filters label { display: inline-block; margin-right: 1rem; }
-  fieldset { margin-bottom: .5rem; }
-</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/app.css">
 </head>
 <body>
-<nav><a href="/">시나리오</a><a href="/issues">이슈</a><a href="/settings">설정</a></nav>
+<header class="top">
+  <a class="logo" href="/">Blockstep</a>
+  <nav>
+    <a href="/"{{if eq .Nav "scenarios"}} class="active"{{end}}>시나리오</a>
+    <a href="/issues"{{if eq .Nav "issues"}} class="active"{{end}}>이슈</a>
+    <a href="/settings"{{if eq .Nav "settings"}} class="active"{{end}}>설정</a>
+  </nav>
+</header>
 <main>
 {{template "content" .}}
 </main>

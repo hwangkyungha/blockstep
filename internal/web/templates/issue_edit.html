@@ -1,0 +1,15 @@
+{{define "title"}}이슈 #{{.Issue.ID}} 편집{{end}}
+{{define "content"}}
+<div class="crumb"><a href="/issues">이슈</a> / <a href="/issues/{{.Issue.ID}}">#{{.Issue.ID}}</a> / 편집</div>
+<h1>#{{.Issue.ID}} 편집</h1>
+<section class="card pad">
+<form method="post" action="/issues/{{.Issue.ID}}" class="stack">
+{{template "issue_fields" .}}
+<div class="row">
+  <button type="submit" class="btn primary">저장</button>
+  <a href="/issues/{{.Issue.ID}}" class="btn">취소</a>
+  <label class="row" style="gap: 6px"><span class="muted">변경자</span><input name="actor" list="people" style="width: 10rem"></label>
+</div>
+</form>
+</section>
+{{end}}

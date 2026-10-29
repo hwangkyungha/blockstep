@@ -1,47 +1,100 @@
 {{define "title"}}이슈 #{{.Issue.ID}}{{end}}
 {{define "content"}}
-<h1>#{{.Issue.ID}} {{.Issue.Title}}
-  {{if .Issue.Blocked}}<span class="badge blocked">블록</span>{{end}}
-  <span class="badge">{{issueLabel .Issue.Status}}</span>
-  <span class="badge">{{.Issue.Priority}}</span>
-</h1>
-<p><small>등록 {{.Issue.CreatedAt}} · 마지막 변경 {{.Issue.UpdatedAt}}</small></p>
-<p>연결 스텝:
-{{range .Issue.Steps}}<a href="/scenarios/{{.ScenarioID}}">{{.ScenarioName}}</a> › {{.StepName}} <small>({{stepLabel .StepStatus}})</small>&nbsp; {{end}}
-</p>
+{{$i := .Issue}}
+<div class="crumb"><a href="/issues">이슈</a> / #{{$i.ID}}</div>
+<div class="page-head">
+  <div class="stack" style="gap: 6px">
+    <div class="row">
+      {{if $i.Blocked}}<span class="pill red">블록</span>{{end}}
+      <span class="badge {{priorityClass $i.Priority}}">{{$i.Priority}}</span>
+      <span class="pill {{statusClass $i.Status}}">{{issueLabel $i.Status}}</span>
+      {{if $i.JiraKey}}<span class="pill">Jira {{$i.JiraKey}}</span>{{end}}
+    </div>
+    <h1>#{{$i.ID}} {{$i.Title}}</h1>
+    <p>리포터 {{$i.Reporter}} · 등록 {{$i.CreatedAt}} · 마지막 변경 {{$i.UpdatedAt}}</p>
+  </div>
+  <div class="row">
+    <a href="/issues/{{$i.ID}}/edit" class="btn">편집</a>
+    <form method="post" action="/issues/{{$i.ID}}/status" class="row" style="gap: 6px">
+      <select name="status" aria-label="처리 상태">{{range .IssueStatuses}}{{if ne . "fixed"}}<option value="{{.}}"{{if eq . $i.Status}} selected{{end}}>{{issueLabel .}}</option>{{end}}{{end}}</select>
+      <input name="actor" list="people" placeholder="변경자" style="width: 7rem">
+      <button type="submit" class="btn">상태 바꾸기</button>
+    </form>
+  </div>
+</div>
 
 <div class="cols">
-<section>
-  <h2>항목</h2>
-  <form method="post" action="/issues/{{.Issue.ID}}">
-  {{template "issue_fields" .}}
-  <label>변경자 <input name="actor" list="people"></label>
-  <button type="submit">저장</button>
-  </form>
-</section>
+  <div class="stack" style="gap: 16px">
+    <section class="card pad stack">
+      <h2>설명</h2>
+      <div class="desc">{{$i.Description}}</div>
+    </section>
 
-<section>
-  <h2>처리 상황 기록</h2>
-  {{if .Notes}}
-  <ul>
-  {{range .Notes}}<li><small>{{.CreatedAt}} {{.Author}}</small><br>{{.Body}}</li>{{end}}
-  </ul>
-  {{else}}<p>아직 기록이 없습니다.</p>{{end}}
-  <form method="post" action="/issues/{{.Issue.ID}}/notes">
-    <label>작성자 <input name="author" list="people" required></label>
-    <label>내용<br><textarea name="body" rows="3" required></textarea></label>
-    <button type="submit">기록 추가</button>
-  </form>
+    <section class="card pad stack">
+      <h2>처리 상황 기록</h2>
+      {{if .Notes}}
+      <div class="timeline">
+      {{range .Notes}}<div class="entry"><span class="who">{{.Author}} · {{.CreatedAt}}</span><span class="desc">{{.Body}}</span></div>{{end}}
+      </div>
+      {{else}}<p class="muted">아직 기록이 없습니다.</p>{{end}}
+      <form method="post" action="/issues/{{$i.ID}}/notes" class="stack">
+        <textarea name="body" rows="3" required placeholder="기록 덧붙이기"></textarea>
+        <div class="row"><input name="author" list="people" placeholder="작성자" required style="width: 10rem"><button type="submit" class="btn">기록 추가</button></div>
+      </form>
+    </section>
 
-  <h2>변경 이력</h2>
-  {{if .Logs}}
-  <table>
-    <thead><tr><th>때</th><th>항목</th><th>이전</th><th>이후</th><th>변경자</th><th>비고</th></tr></thead>
-    <tbody>
-    {{range .Logs}}<tr><td>{{.At}}</td><td>{{.Field}}</td><td>{{.OldValue}}</td><td>{{.NewValue}}</td><td>{{.Actor}}</td><td>{{.Note}}</td></tr>{{end}}
-    </tbody>
-  </table>
-  {{else}}<p>이력이 없습니다.</p>{{end}}
-</section>
+    {{if ne $i.Status "fixed"}}{{if ne $i.Status "verified"}}
+    <section class="card pad stack">
+      <h2>조치 완료로 바꾸기</h2>
+      <p class="muted">아래 두 칸을 적으면 상태가 조치 완료가 됩니다. {{.FixHint}}</p>
+      <form method="post" action="/issues/{{$i.ID}}/fix" class="stack">
+        <div class="form-grid">
+          <label class="field">반영 패키지 (필수) <input name="applied_package" list="packages" required value="{{$i.AppliedPackage}}"></label>
+          <label class="field">Jira 키 (선택) <input name="jira_key" value="{{$i.JiraKey}}" placeholder="CT2612-405"></label>
+          <label class="field wide">처리 후 내용 (필수) · 새 바이너리 적용 방법, 바뀐 API, 설정 변경 <textarea name="resolution_note" rows="4" required>{{$i.ResolutionNote}}</textarea></label>
+        </div>
+        <div class="row"><button type="submit" class="btn primary">조치 완료로 저장</button><input name="actor" list="people" placeholder="변경자" style="width: 10rem"></div>
+      </form>
+    </section>
+    {{end}}{{end}}
+  </div>
+
+  <div class="stack" style="gap: 16px">
+    <section class="card pad stack">
+      <h2>항목</h2>
+      <dl class="kv">
+        <dt>처리 상태</dt><dd>{{issueLabel $i.Status}}</dd>
+        <dt>담당자</dt><dd>{{if $i.Assignee}}{{$i.Assignee}}{{else}}<span class="faint">미배정</span>{{end}}</dd>
+        <dt>리포터</dt><dd>{{$i.Reporter}}</dd>
+        <dt>긴급도</dt><dd>{{$i.Priority}}</dd>
+        <dt>블록 여부</dt><dd>{{if $i.Blocked}}<span style="color: var(--red-text); font-weight: 700">블록</span>{{else}}아님{{end}} <span class="faint">(자동)</span></dd>
+        <dt>목표 기한</dt><dd>{{if $i.DueDate}}{{$i.DueDate}}{{else}}<span class="faint">—</span>{{end}}</dd>
+        <dt>발견 패키지</dt><dd>{{$i.FoundPackage}}</dd>
+        <dt>반영 패키지</dt><dd>{{if $i.AppliedPackage}}{{$i.AppliedPackage}}{{else}}<span class="faint">—</span>{{end}}</dd>
+        <dt>Jira 키</dt><dd>{{if $i.JiraKey}}{{$i.JiraKey}}{{else}}<span class="faint">—</span>{{end}}</dd>
+      </dl>
+      {{if $i.ResolutionNote}}<div><div class="muted">처리 후 내용</div><div class="desc">{{$i.ResolutionNote}}</div></div>{{end}}
+    </section>
+
+    <section class="card pad stack">
+      <h2>연결 스텝</h2>
+      {{range $i.Steps}}
+      <div class="row" style="justify-content: space-between">
+        <span><a href="/scenarios/{{.ScenarioID}}" style="color: inherit; font-weight: 500">{{.StepName}}</a><br><small>{{.ScenarioName}} · {{stepLabel .StepStatus}}</small></span>
+        <span class="dot" style="background: {{index $.Colors .StepStatus}};{{if eq .StepStatus "unchecked"}} border: 1px solid #B9BEC5{{end}}"></span>
+      </div>
+      {{end}}
+      <a href="/issues/{{$i.ID}}/edit" class="muted">+ 스텝 연결</a>
+    </section>
+
+    <section class="card pad stack">
+      <h2>변경 이력</h2>
+      {{if .Logs}}
+      <div class="log">
+      {{range .Logs}}<div>{{.At}} · {{if .Actor}}{{.Actor}}{{else}}시스템{{end}} · <b>{{.Field}}</b>{{if or .OldValue .NewValue}} {{.OldValue}} → {{.NewValue}}{{end}}{{if .Note}} <span class="faint">{{.Note}}</span>{{end}}</div>{{end}}
+      </div>
+      {{else}}<p class="muted">이력이 없습니다.</p>{{end}}
+    </section>
+  </div>
 </div>
 {{end}}

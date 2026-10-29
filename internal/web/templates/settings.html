@@ -1,10 +1,12 @@
 {{define "title"}}설정{{end}}
 {{define "content"}}
-<h1>설정</h1>
-{{if .Saved}}<p>저장했습니다.</p>{{end}}
-<form method="post" action="/settings">
-  <label>확인일 경과 기준(일) <input name="stale_days" type="number" min="0" value="{{.StaleDays}}" required> <small>지원 스텝의 확인일이 이 일수를 지나면 노선도에 「N일 지남」을 표시합니다</small></label>
-  <label>Slack Incoming Webhook URL <input name="slack_webhook_url" value="{{.SlackWebhookURL}}" style="width: 40rem" placeholder="비워 두면 Slack 알림을 보내지 않습니다"></label>
-  <button type="submit">저장</button>
+<div class="page-head"><div><h1>설정</h1><p>값은 저장 즉시 모든 화면에 적용됩니다.</p></div></div>
+{{if .Saved}}<div class="note" style="background: var(--green-bg); border-color: #B7E1C6; color: var(--green-text)">저장했습니다.</div>{{end}}
+<section class="card pad">
+<form method="post" action="/settings" class="stack">
+  <label class="field">확인일 경과 기준(일) <input name="stale_days" type="number" min="0" value="{{.StaleDays}}" required style="width: 8rem"><small>지원 스텝의 확인일이 이 일수를 지나면 노선도에 「N일 지남」을 표시합니다</small></label>
+  <label class="field">Slack Incoming Webhook URL <input name="slack_webhook_url" value="{{.SlackWebhookURL}}" placeholder="비워 두면 Slack 알림을 보내지 않습니다"></label>
+  <div class="row"><button type="submit" class="btn primary">저장</button></div>
 </form>
+</section>
 {{end}}
