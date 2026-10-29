@@ -1,4 +1,1 @@
-/build/
-*.db
-*.sqlite
-*.sqlite-journal
+blockstep.db

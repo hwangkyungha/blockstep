@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>Blockstep - 시나리오 목록</title>
+<style>
+  body { font-family: sans-serif; margin: 2rem; }
+  table { border-collapse: collapse; }
+  th, td { border: 1px solid #ccc; padding: .4rem .8rem; text-align: left; }
+  form { margin-top: 1.5rem; }
+  label { display: block; margin-bottom: .5rem; }
+  input, textarea { width: 24rem; }
+</style>
+</head>
+<body>
+<h1>시나리오 목록</h1>
+{{if .Scenarios}}
+<table>
+  <thead><tr><th>이름</th><th>설명</th></tr></thead>
+  <tbody>
+  {{range .Scenarios}}
+  <tr><td>{{.Name}}</td><td>{{.Description}}</td></tr>
+  {{end}}
+  </tbody>
+</table>
+{{else}}
+<p>아직 시나리오가 없습니다.</p>
+{{end}}
+
+<h2>시나리오 만들기</h2>
+<form method="post" action="/scenarios">
+  <label>이름 <input name="name" required></label>
+  <label>설명 <textarea name="description" rows="3"></textarea></label>
+  <button type="submit">만들기</button>
+</form>
+</body>
+</html>
