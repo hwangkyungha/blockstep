@@ -145,3 +145,36 @@ func TestIssueFixAndStatusForms(t *testing.T) {
 		t.Errorf("마지막 이슈의 안내가 없다")
 	}
 }
+
+func TestIssueCreateThenBlock(t *testing.T) {
+	e := newEnv(t)
+	scID := e.newScenario("설치", "설치 실행\n라이선스 확인\n")
+	steps, _ := e.store.ScenarioSteps(scID)
+	lic := steps[1]
+
+	page := e.get("/issues/new?step_id=" + itoa(lic.ID) + "&then=block")
+	for _, want := range []string{"스텝 「라이선스 확인」이 블록으로 바뀝니다", `name="then" value="block"`, `name="step_id" value="` + itoa(lic.ID) + `"`, `value="` + itoa(lic.ID) + `" checked`} {
+		if !strings.Contains(page, want) {
+			t.Errorf("폼에 %q가 없다", want)
+		}
+	}
+	form := issueForm(lic.ID)
+	form.Set("then", "block")
+	form.Set("step_id", itoa(lic.ID))
+	e.mustRedirect(e.do("POST", "/issues", form), "/scenarios/"+itoa(scID)+"?tab=edit&step="+itoa(lic.ID))
+	st, _ := e.store.GetStep(lic.ID)
+	if st.Status != store.StepBlocked {
+		t.Fatalf("스텝 상태 = %s, want blocked", st.Status)
+	}
+	logs, _ := e.store.ChangeLogs("step", lic.ID)
+	if last := logs[len(logs)-1]; last.Note != "이슈 #1 등록으로 블록" || last.NewValue != store.StepBlocked {
+		t.Errorf("이력 = %+v", last)
+	}
+	// 블록할 스텝을 연결에서 빼면 거부한다.
+	form = issueForm(steps[0].ID)
+	form.Set("then", "block")
+	form.Set("step_id", itoa(lic.ID))
+	if rec := e.do("POST", "/issues", form); rec.Code != http.StatusBadRequest {
+		t.Errorf("연결 안 된 스텝 블록 = %d", rec.Code)
+	}
+}

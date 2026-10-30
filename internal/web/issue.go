@@ -181,8 +181,19 @@ func (srv *server) issueNew(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	in := store.IssueInput{Status: store.IssueOpen, Priority: "P2"}
-	if id, err := strconv.ParseInt(r.URL.Query().Get("step"), 10, 64); err == nil {
-		in.StepIDs = []int64{id}
+	q := r.URL.Query()
+	stepID, _ := strconv.ParseInt(q.Get("step_id"), 10, 64)
+	if stepID == 0 {
+		stepID, _ = strconv.ParseInt(q.Get("step"), 10, 64)
+	}
+	if stepID != 0 {
+		in.StepIDs = []int64{stepID}
+	}
+	// then=block: 이슈를 저장하면 그 스텝을 블록으로 바꾼다(편집 탭에서 미해결 이슈 없는 스텝을 블록으로 고른 경우).
+	if q.Get("then") == "block" && stepID != 0 {
+		if st, err := srv.store.GetStep(stepID); err == nil {
+			data["BlockStep"] = st
+		}
 	}
 	data["Issue"] = store.Issue{Status: in.Status, Priority: in.Priority}
 	data["Checked"] = checkedSet(in.StepIDs)
@@ -199,9 +210,41 @@ func checkedSet(ids []int64) map[int64]bool {
 
 func (srv *server) issueCreate(w http.ResponseWriter, r *http.Request) {
 	in := parseIssueInput(r)
-	id, res, err := srv.store.CreateIssue(in, strings.TrimSpace(r.FormValue("reporter")))
+	actor := strings.TrimSpace(r.FormValue("reporter"))
+	blockStep, _ := strconv.ParseInt(r.FormValue("step_id"), 10, 64)
+	if r.FormValue("then") != "block" {
+		blockStep = 0
+	}
+	if blockStep != 0 {
+		linked := false
+		for _, sid := range in.StepIDs {
+			linked = linked || sid == blockStep
+		}
+		if !linked {
+			fail(w, store.ValidationError("블록으로 바꿀 스텝이 연결 스텝에 들어 있어야 합니다"))
+			return
+		}
+	}
+	id, res, err := srv.store.CreateIssue(in, actor)
 	if err != nil {
 		fail(w, err)
+		return
+	}
+	if blockStep != 0 {
+		st, err := srv.store.GetStep(blockStep)
+		if err != nil {
+			fail(w, err)
+			return
+		}
+		if _, err := srv.store.SetStepStatuses([]store.StepStatusChange{{StepID: blockStep, Status: store.StepBlocked, CheckedBy: actor,
+			Note: fmt.Sprintf("이슈 #%d 등록으로 블록", id)}}); err != nil {
+			fail(w, err)
+			return
+		}
+		st.Status = store.StepBlocked
+		res.BlockedSteps = append(res.BlockedSteps, st)
+		srv.notifyNewIssue(id, res)
+		http.Redirect(w, r, "/scenarios/"+strconv.FormatInt(st.ScenarioID, 10)+"?tab=edit&step="+strconv.FormatInt(blockStep, 10), http.StatusSeeOther)
 		return
 	}
 	srv.notifyNewIssue(id, res)
