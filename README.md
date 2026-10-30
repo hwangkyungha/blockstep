@@ -29,7 +29,7 @@ go run ./cmd/blockstep -db blockstep.db -addr :8080
 - `-db`: SQLite 파일 경로. 기본값 `blockstep.db`
 - `-addr`: 듣는 주소. 기본값 `:8080`
 
-실행 파일로 배포하려면 `go build -o blockstep ./cmd/blockstep`로 만든 파일과 SQLite 파일만 두면 된다.
+실행 파일로 배포하려면 `go build -o blockstep ./cmd/blockstep`로 만든 파일과 SQLite 파일만 두면 된다. Windows에서는 `.build.ps1`이 같은 명령으로 `blockstep.exe`를 만든다.
 Slack 알림은 화면의 「설정」에서 Incoming Webhook URL을 넣어야 보낸다. 비어 있으면 보내지 않는다.
 
 ## 검증
