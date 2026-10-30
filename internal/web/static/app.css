@@ -138,3 +138,8 @@ table.list tr.link-row:hover td { background: #FAFBFC; }
 .combo-list { position: absolute; z-index: 20; max-height: 220px; overflow-y: auto; background: var(--card); border: 1px solid #D0D4DA; border-radius: 6px; box-shadow: 0 6px 18px rgba(0,0,0,.10); padding: 4px 0; font-size: 13px; }
 .combo-item { padding: 6px 12px; cursor: pointer; white-space: nowrap; }
 .combo-item:hover, .combo-item.active { background: var(--blue-bg); color: var(--blue-text); }
+
+.error-box { padding: 10px 12px; background: var(--red-bg); border: 1px solid #F0B4B8; border-radius: 6px; color: var(--red-text); font-size: 13px; }
+.status-table tr.has-error td { background: #FFF5F5; }
+.status-table tr.focus td { background: var(--blue-bg); }
+.status-table td .error { margin-top: 4px; }

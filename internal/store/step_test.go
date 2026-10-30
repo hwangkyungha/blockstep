@@ -202,3 +202,44 @@ func TestScenarioStepsOrderedFollowsOutline(t *testing.T) {
 		t.Errorf("순서 = %v", got)
 	}
 }
+
+func TestSetStepStatusesIsAllOrNothing(t *testing.T) {
+	s := openTemp(t)
+	scID, _ := s.CreateScenario("설치", "")
+	if err := s.SaveOutline(scID, mustParse(t, "하나\n둘\n"), "홍길동"); err != nil {
+		t.Fatal(err)
+	}
+	steps, _ := s.ScenarioSteps(scID)
+	changes := []StepStatusChange{
+		{StepID: steps[0].ID, Status: StepSupported, CheckedPackage: "2026-10-29", CheckedBy: "홍길동"},
+		{StepID: steps[1].ID, Status: StepSupported}, // 확인 패키지 없음 → 거부
+	}
+	if _, err := s.SetStepStatuses(changes); err == nil {
+		t.Fatal("한 줄이 어긋났는데 저장되었다")
+	}
+	st, _ := s.GetStep(steps[0].ID)
+	if st.Status != StepUnchecked {
+		t.Errorf("거부되었는데 첫 줄이 저장되었다: %s", st.Status)
+	}
+	changes[1] = StepStatusChange{StepID: steps[1].ID, Status: StepNotImplemented, Note: "계획만 있음"}
+	if _, err := s.SetStepStatuses(changes); err != nil {
+		t.Fatal(err)
+	}
+	a, _ := s.GetStep(steps[0].ID)
+	b, _ := s.GetStep(steps[1].ID)
+	if a.Status != StepSupported || b.Status != StepNotImplemented {
+		t.Errorf("상태 = %s %s", a.Status, b.Status)
+	}
+	logs, _ := s.ChangeLogs("step", steps[1].ID)
+	if last := logs[len(logs)-1]; last.Note != "계획만 있음" {
+		t.Errorf("이력 사유 = %+v", last)
+	}
+	same := StepStatusChange{StepID: a.ID, Status: StepSupported, CheckedPackage: "2026-10-29", CheckedBy: "홍길동"}
+	if same.Changed(a) {
+		t.Error("같은 값인데 바뀐 것으로 본다")
+	}
+	same.CheckedBy = "김엔진"
+	if !same.Changed(a) {
+		t.Error("확인자가 바뀌었는데 같은 것으로 본다")
+	}
+}

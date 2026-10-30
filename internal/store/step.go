@@ -256,88 +256,139 @@ func logChange(db execer, entity string, entityID int64, field, oldValue, newVal
 	return err
 }
 
-// SetStepStatus는 스텝 상태를 바꾼다. 규칙은 설계안 5.1과 5.3이다.
-//   - 지원: 확인 패키지와 확인자가 필수이고 확인일을 지금으로 적는다.
+// StepStatusChange는 스텝 하나의 상태 변경 요청이다. Note는 변경 이력에 남길 사유다.
+type StepStatusChange struct {
+	StepID         int64
+	Status         string
+	CheckedPackage string
+	CheckedBy      string
+	Note           string
+}
+
+// Changed는 요청이 현재 스텝과 다른 값을 담고 있는지 본다. 같으면 저장하지 않고 이력도 남기지 않는다.
+func (c StepStatusChange) Changed(st Step) bool {
+	if c.Status != st.Status {
+		return true
+	}
+	return c.Status == StepSupported && (c.CheckedPackage != st.CheckedPackage || c.CheckedBy != st.CheckedBy)
+}
+
+// UnresolvedCount는 스텝에 연결된 미해결 이슈 수다.
+func (s *Store) UnresolvedCount(stepID int64) (int, error) {
+	var n int
+	err := s.db.QueryRow("SELECT COUNT(*) FROM issue_step js JOIN issue i ON i.id = js.issue_id WHERE js.step_id = ? AND "+unresolvedCondition, stepID).Scan(&n)
+	return n, err
+}
+
+// ValidateStepStatus는 상태 변경 요청이 규칙에 맞는지 본다. 설계안 5.1과 5.3이다.
+//   - 지원: 확인 패키지와 확인자가 필수다.
 //   - 블록: 미해결 이슈가 하나 이상 연결되어 있어야 한다.
-//   - 지원으로 바꾸면 연결된 조치 완료 이슈 가운데 연결 스텝이 모두 지원인 이슈를 검증 완료로 바꾼다.
-//
-// 돌려주는 값은 검증 완료로 바뀐 이슈 id 목록이다.
-func (s *Store) SetStepStatus(id int64, status, checkedPackage, checkedBy string) ([]int64, error) {
-	if _, ok := StepStatusLabel[status]; !ok {
-		return nil, ValidationError("알 수 없는 상태입니다: " + status)
+func (s *Store) ValidateStepStatus(c StepStatusChange) error {
+	if _, ok := StepStatusLabel[c.Status]; !ok {
+		return ValidationError("알 수 없는 상태입니다: " + c.Status)
 	}
-	st, err := s.GetStep(id)
-	if err != nil {
-		return nil, err
-	}
-	switch status {
+	switch c.Status {
 	case StepSupported:
-		if checkedPackage == "" || checkedBy == "" {
-			return nil, ValidationError("지원으로 바꾸려면 확인 패키지와 확인자를 적어야 합니다")
+		if c.CheckedPackage == "" || c.CheckedBy == "" {
+			return ValidationError("지원으로 바꾸려면 확인 패키지와 확인자를 적어야 합니다")
 		}
 	case StepBlocked:
-		var n int
-		if err := s.db.QueryRow("SELECT COUNT(*) FROM issue_step js JOIN issue i ON i.id = js.issue_id WHERE js.step_id = ? AND "+unresolvedCondition, id).Scan(&n); err != nil {
-			return nil, err
+		n, err := s.UnresolvedCount(c.StepID)
+		if err != nil {
+			return err
 		}
 		if n == 0 {
-			return nil, ValidationError("블록으로 바꾸려면 미해결 이슈를 먼저 연결해야 합니다")
+			return ValidationError("블록으로 바꾸려면 미해결 이슈를 먼저 연결해야 합니다")
 		}
 	}
+	return nil
+}
 
+// SetStepStatus는 스텝 하나의 상태를 바꾼다. 돌려주는 값은 검증 완료로 바뀐 이슈 id 목록이다.
+func (s *Store) SetStepStatus(id int64, status, checkedPackage, checkedBy string) ([]int64, error) {
+	return s.SetStepStatuses([]StepStatusChange{{StepID: id, Status: status, CheckedPackage: checkedPackage, CheckedBy: checkedBy}})
+}
+
+// SetStepStatuses는 여러 스텝의 상태를 한 트랜잭션으로 바꾼다. 하나라도 규칙에 어긋나면 아무것도 저장하지 않는다.
+// 지원으로 바꾸면 확인일을 지금으로 적고, 연결된 조치 완료 이슈 가운데 연결 스텝이 모두 지원인 이슈를 검증 완료로 바꾼다(규칙 3).
+// 돌려주는 값은 검증 완료로 바뀐 이슈 id 목록이다.
+func (s *Store) SetStepStatuses(changes []StepStatusChange) ([]int64, error) {
+	steps := make([]Step, len(changes))
+	for i, c := range changes {
+		if err := s.ValidateStepStatus(c); err != nil {
+			return nil, err
+		}
+		st, err := s.GetStep(c.StepID)
+		if err != nil {
+			return nil, err
+		}
+		steps[i] = st
+	}
 	tx, err := s.db.Begin()
 	if err != nil {
 		return nil, err
 	}
 	defer tx.Rollback()
-	if status == StepSupported {
-		now := time.Now().Format(time.RFC3339)
-		if _, err := tx.Exec("UPDATE step SET status = ?, checked_package = ?, checked_by = ?, checked_at = ? WHERE id = ?",
-			status, checkedPackage, checkedBy, now, id); err != nil {
-			return nil, err
-		}
-		if st.CheckedPackage != checkedPackage {
-			if err := logChange(tx, "step", id, "checked_package", st.CheckedPackage, checkedPackage, checkedBy, ""); err != nil {
-				return nil, err
-			}
-		}
-	} else if _, err := tx.Exec("UPDATE step SET status = ? WHERE id = ?", status, id); err != nil {
-		return nil, err
-	}
-	if st.Status != status {
-		if err := logChange(tx, "step", id, "status", st.Status, status, checkedBy, ""); err != nil {
-			return nil, err
-		}
-	}
-
 	var verified []int64
-	if status == StepSupported {
-		rows, err := tx.Query(`SELECT i.id FROM issue i JOIN issue_step js ON js.issue_id = i.id
-			WHERE js.step_id = ? AND i.status = 'fixed'
-			AND NOT EXISTS (SELECT 1 FROM issue_step js2 JOIN step s2 ON s2.id = js2.step_id WHERE js2.issue_id = i.id AND s2.status <> 'supported')`, id)
+	for i, c := range changes {
+		v, err := applyStepStatus(tx, steps[i], c)
 		if err != nil {
 			return nil, err
 		}
-		for rows.Next() {
-			var iid int64
-			if err := rows.Scan(&iid); err != nil {
-				rows.Close()
-				return nil, err
-			}
-			verified = append(verified, iid)
-		}
-		rows.Close()
-		for _, iid := range verified {
-			if _, err := tx.Exec("UPDATE issue SET status = 'verified', updated_at = datetime('now') WHERE id = ?", iid); err != nil {
-				return nil, err
-			}
-			if err := logChange(tx, "issue", iid, "status", IssueFixed, IssueVerified, checkedBy,
-				fmt.Sprintf("스텝 「%s」 지원 전환으로 자동 전환", st.Name)); err != nil {
-				return nil, err
-			}
-		}
+		verified = append(verified, v...)
 	}
 	return verified, tx.Commit()
+}
+
+func applyStepStatus(tx *sql.Tx, st Step, c StepStatusChange) ([]int64, error) {
+	if c.Status == StepSupported {
+		now := time.Now().Format(time.RFC3339)
+		if _, err := tx.Exec("UPDATE step SET status = ?, checked_package = ?, checked_by = ?, checked_at = ? WHERE id = ?",
+			c.Status, c.CheckedPackage, c.CheckedBy, now, st.ID); err != nil {
+			return nil, err
+		}
+		if st.CheckedPackage != c.CheckedPackage {
+			if err := logChange(tx, "step", st.ID, "checked_package", st.CheckedPackage, c.CheckedPackage, c.CheckedBy, ""); err != nil {
+				return nil, err
+			}
+		}
+	} else if _, err := tx.Exec("UPDATE step SET status = ? WHERE id = ?", c.Status, st.ID); err != nil {
+		return nil, err
+	}
+	if st.Status != c.Status {
+		if err := logChange(tx, "step", st.ID, "status", st.Status, c.Status, c.CheckedBy, c.Note); err != nil {
+			return nil, err
+		}
+	}
+	if c.Status != StepSupported {
+		return nil, nil
+	}
+	rows, err := tx.Query(`SELECT i.id FROM issue i JOIN issue_step js ON js.issue_id = i.id
+		WHERE js.step_id = ? AND i.status = 'fixed'
+		AND NOT EXISTS (SELECT 1 FROM issue_step js2 JOIN step s2 ON s2.id = js2.step_id WHERE js2.issue_id = i.id AND s2.status <> 'supported')`, st.ID)
+	if err != nil {
+		return nil, err
+	}
+	var verified []int64
+	for rows.Next() {
+		var iid int64
+		if err := rows.Scan(&iid); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		verified = append(verified, iid)
+	}
+	rows.Close()
+	for _, iid := range verified {
+		if _, err := tx.Exec("UPDATE issue SET status = 'verified', updated_at = datetime('now') WHERE id = ?", iid); err != nil {
+			return nil, err
+		}
+		if err := logChange(tx, "issue", iid, "status", IssueFixed, IssueVerified, c.CheckedBy,
+			fmt.Sprintf("스텝 「%s」 지원 전환으로 자동 전환", st.Name)); err != nil {
+			return nil, err
+		}
+	}
+	return verified, nil
 }
 
 // ChangeLog는 변경 이력의 한 줄이다.

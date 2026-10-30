@@ -36,7 +36,7 @@ func TestSlackNotifications(t *testing.T) {
 
 	// 웹훅이 비어 있으면 보내지 않는다.
 	e.do("POST", "/issues", issueForm(lic.ID))
-	e.do("POST", "/steps/"+itoa(lic.ID)+"/status", url.Values{"status": {"blocked"}, "checked_by": {"홍길동"}})
+	e.setStatus(lic.ID, "blocked", "", "홍길동")
 	if len(messages) != 0 {
 		t.Fatalf("웹훅 없이 보냈다: %v", messages)
 	}
@@ -84,7 +84,7 @@ func TestSlackFailureIsLoggedNotFatal(t *testing.T) {
 	steps, _ := e.store.ScenarioSteps(scID)
 	e.store.SetSetting("slack_webhook_url", ts.URL)
 	e.do("POST", "/issues", issueForm(steps[0].ID))
-	e.do("POST", "/steps/"+itoa(steps[0].ID)+"/status", url.Values{"status": {"blocked"}, "checked_by": {"홍길동"}})
+	e.setStatus(steps[0].ID, "blocked", "", "홍길동")
 	e.mustRedirect(e.do("POST", "/issues/1", fixedForm(steps[0].ID, "첫 이슈")), "/issues/1")
 	issue, _ := e.store.GetIssue(1)
 	if issue.Status != "fixed" {

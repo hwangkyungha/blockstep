@@ -76,6 +76,22 @@ func (e *env) newScenario(name, outline string) int64 {
 
 func itoa(id int64) string { return strconv.FormatInt(id, 10) }
 
+// statusForm은 상태 일괄 저장 폼의 값이다. 스텝 하나 분량만 담는다.
+func statusForm(stepID int64, status, pkg, by string) url.Values {
+	key := itoa(stepID)
+	return url.Values{"status_" + key: {status}, "checked_package_" + key: {pkg}, "checked_by_" + key: {by}}
+}
+
+// setStatus는 스텝 하나의 상태를 일괄 저장 폼으로 바꾼다.
+func (e *env) setStatus(stepID int64, status, pkg, by string) *httptest.ResponseRecorder {
+	e.t.Helper()
+	st, err := e.store.GetStep(stepID)
+	if err != nil {
+		e.t.Fatal(err)
+	}
+	return e.do("POST", "/scenarios/"+itoa(st.ScenarioID)+"/steps/status", statusForm(stepID, status, pkg, by))
+}
+
 func TestCreateScenarioAndList(t *testing.T) {
 	e := newEnv(t)
 	rec := e.do("POST", "/scenarios", url.Values{"name": {"설치"}, "description": {"설치부터 라이선스 확인까지"}})
@@ -97,7 +113,7 @@ func TestOutlineSaveAndPage(t *testing.T) {
 	e := newEnv(t)
 	id := e.newScenario("설치", "설치 실행\n라이선스 확인\n  ? 라이선스 없음\n    평가판 안내\n")
 	body := e.get("/scenarios/" + itoa(id))
-	for _, want := range []string{"라이선스 확인\n  ? 라이선스 없음\n    평가판 안내", `라이선스 없음 › 평가판 안내</option>`, `id="status-form"`, `"name":"평가판 안내"`} {
+	for _, want := range []string{"라이선스 확인\n  ? 라이선스 없음\n    평가판 안내", `<small>라이선스 없음 ›</small> 평가판 안내`, `id="status-form"`, `"name":"평가판 안내"`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("화면에 %q가 없다:\n%s", want, body)
 		}
@@ -111,25 +127,66 @@ func TestOutlineSaveAndPage(t *testing.T) {
 	}
 }
 
-func TestStepStatusForm(t *testing.T) {
+func TestBulkStepStatus(t *testing.T) {
 	e := newEnv(t)
-	id := e.newScenario("설치", "설치 실행\n")
+	id := e.newScenario("설치", "하나\n둘\n셋\n")
 	steps, _ := e.store.ScenarioSteps(id)
-	path := "/steps/" + itoa(steps[0].ID) + "/status"
+	one, two, three := steps[0], steps[1], steps[2]
+	path := "/scenarios/" + itoa(id) + "/steps/status"
 
-	rec := e.do("POST", path, url.Values{"status": {"supported"}})
-	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "확인 패키지") {
-		t.Errorf("확인 패키지 없는 지원 = %d %s", rec.Code, rec.Body.String())
+	// 한 줄이 어긋나면 전체를 저장하지 않고, 화면을 다시 그리며 입력 값과 줄별 오류를 보여 준다.
+	form := statusForm(one.ID, "supported", "2026-10-29", "홍길동")
+	for k, v := range statusForm(two.ID, "supported", "", "김엔진") {
+		form[k] = v
 	}
-	rec = e.do("POST", path, url.Values{"status": {"blocked"}, "checked_by": {"홍길동"}})
+	rec := e.do("POST", path, form)
 	if rec.Code != http.StatusBadRequest {
-		t.Errorf("이슈 없는 블록 = %d", rec.Code)
+		t.Fatalf("응답 = %d, want 400", rec.Code)
 	}
-	rec = e.do("POST", path, url.Values{"status": {"supported"}, "checked_package": {"2026-10-29"}, "checked_by": {"홍길동"}})
-	e.mustRedirect(rec, "/scenarios/"+itoa(id)+"?tab=edit&step="+itoa(steps[0].ID))
-	st, _ := e.store.GetStep(steps[0].ID)
-	if st.Status != "supported" || st.CheckedPackage != "2026-10-29" {
-		t.Errorf("스텝 = %+v", st)
+	body := rec.Body.String()
+	for _, want := range []string{`id="step-row-` + itoa(two.ID) + `" class="has-error"`, "확인 패키지와 확인자를 적어야 합니다", `value="김엔진"`, `value="2026-10-29"`, `class="error-box"`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("거부 화면에 %q가 없다", want)
+		}
+	}
+	if st, _ := e.store.GetStep(one.ID); st.Status != "unchecked" {
+		t.Errorf("거부되었는데 첫 줄이 저장되었다: %s", st.Status)
+	}
+
+	// 바뀐 줄만 저장하고, 바뀌지 않은 줄은 이력을 남기지 않는다.
+	form = statusForm(one.ID, "supported", "2026-10-29", "홍길동")
+	for k, v := range statusForm(two.ID, "not_implemented", "", "") {
+		form[k] = v
+	}
+	for k, v := range statusForm(three.ID, "unchecked", "", "") {
+		form[k] = v
+	}
+	e.mustRedirect(e.do("POST", path, form), "/scenarios/"+itoa(id)+"?tab=edit")
+	a, _ := e.store.GetStep(one.ID)
+	b, _ := e.store.GetStep(two.ID)
+	if a.Status != "supported" || a.CheckedPackage != "2026-10-29" || b.Status != "not_implemented" {
+		t.Errorf("스텝 = %+v %+v", a, b)
+	}
+	if logs, _ := e.store.ChangeLogs("step", three.ID); len(logs) != 1 {
+		t.Errorf("바뀌지 않은 줄에 이력이 남았다: %+v", logs)
+	}
+	// 같은 값을 다시 저장해도 이력이 늘지 않는다.
+	before, _ := e.store.ChangeLogs("step", one.ID)
+	e.do("POST", path, statusForm(one.ID, "supported", "2026-10-29", "홍길동"))
+	if after, _ := e.store.ChangeLogs("step", one.ID); len(after) != len(before) {
+		t.Errorf("같은 값인데 이력이 늘었다: %d → %d", len(before), len(after))
+	}
+
+	// 미해결 이슈가 없는 스텝을 블록으로 고르면 나머지를 저장한 뒤 이슈 등록으로 보낸다.
+	form = statusForm(three.ID, "blocked", "", "")
+	for k, v := range statusForm(two.ID, "needs_test", "", "") {
+		form[k] = v
+	}
+	e.mustRedirect(e.do("POST", path, form), "/issues/new?step_id="+itoa(three.ID)+"&then=block")
+	b, _ = e.store.GetStep(two.ID)
+	c, _ := e.store.GetStep(three.ID)
+	if b.Status != "needs_test" || c.Status != "unchecked" {
+		t.Errorf("나머지 줄 저장 = %s, 블록 줄 = %s", b.Status, c.Status)
 	}
 }
 
@@ -137,7 +194,7 @@ func TestScenarioPageHasMapAndListHasSummary(t *testing.T) {
 	e := newEnv(t)
 	id := e.newScenario("설치", "설치 실행\n라이선스 확인\n  ? 라이선스 없음\n    평가판 안내\n설정\n")
 	steps, _ := e.store.ScenarioSteps(id)
-	e.do("POST", "/steps/"+itoa(steps[0].ID)+"/status", url.Values{"status": {"supported"}, "checked_package": {"2026-10-29"}, "checked_by": {"홍길동"}})
+	e.setStatus(steps[0].ID, "supported", "2026-10-29", "홍길동")
 
 	body := e.get("/scenarios/" + itoa(id))
 	for _, want := range []string{`<svg class="railmap"`, `data-step-id="` + itoa(steps[0].ID) + `"`, `>라이선스 없음</text>`} {

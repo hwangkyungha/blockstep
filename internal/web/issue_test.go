@@ -44,7 +44,7 @@ func TestIssueCreateListDetail(t *testing.T) {
 	}
 
 	// 블록 스텝으로 바꾸면 목록과 상세에 블록 표시가 붙고, 스텝 필터가 칩으로 보인다.
-	e.do("POST", "/steps/"+itoa(lic.ID)+"/status", url.Values{"status": {"blocked"}, "checked_by": {"홍길동"}})
+	e.setStatus(lic.ID, "blocked", "", "홍길동")
 	list := e.get("/issues?step=" + itoa(lic.ID))
 	for _, want := range []string{`background: var(--blocked)`, `스텝: 라이선스 확인 <a href="/issues"`, `/issues/new?step=` + itoa(lic.ID)} {
 		if !strings.Contains(list, want) {
@@ -68,7 +68,7 @@ func TestIssueUpdateReleasesStepAndNotes(t *testing.T) {
 	steps, _ := e.store.ScenarioSteps(scID)
 	lic := steps[1]
 	e.do("POST", "/issues", issueForm(lic.ID))
-	e.do("POST", "/steps/"+itoa(lic.ID)+"/status", url.Values{"status": {"blocked"}, "checked_by": {"홍길동"}})
+	e.setStatus(lic.ID, "blocked", "", "홍길동")
 
 	form := issueForm(lic.ID)
 	form.Set("status", "fixed")
@@ -111,7 +111,7 @@ func TestIssueFixAndStatusForms(t *testing.T) {
 	second := issueForm(lic.ID)
 	second.Set("title", "두 번째")
 	e.do("POST", "/issues", second)
-	e.do("POST", "/steps/"+itoa(lic.ID)+"/status", url.Values{"status": {"blocked"}, "checked_by": {"홍길동"}})
+	e.setStatus(lic.ID, "blocked", "", "홍길동")
 
 	detail := e.get("/issues/1")
 	if !strings.Contains(detail, "미해결 이슈 #2가 남아 블록이 유지됩니다") {

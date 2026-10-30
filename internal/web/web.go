@@ -84,7 +84,7 @@ func Handler(s *store.Store) http.Handler {
 	mux.HandleFunc("POST /scenarios", srv.createScenario)
 	mux.HandleFunc("GET /scenarios/{id}", srv.scenarioPage)
 	mux.HandleFunc("PUT /scenarios/{id}/outline", srv.saveOutline)
-	mux.HandleFunc("POST /steps/{id}/status", srv.setStepStatus)
+	mux.HandleFunc("POST /scenarios/{id}/steps/status", srv.bulkStepStatus)
 	mux.HandleFunc("GET /issues", srv.issueList)
 	mux.HandleFunc("GET /issues/new", srv.issueNew)
 	mux.HandleFunc("POST /issues", srv.issueCreate)
@@ -206,12 +206,24 @@ func (srv *server) createScenario(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/scenarios/"+strconv.FormatInt(id, 10), http.StatusSeeOther)
 }
 
+// scenarioView는 시나리오 화면을 그릴 때 덧붙이는 값이다. 상태 일괄 저장이 거부되면 입력 값과 줄별 오류를 담아 다시 그린다.
+type scenarioView struct {
+	Status    int
+	Error     string
+	RowErrors map[int64]string
+	Submitted map[int64]store.StepStatusChange
+}
+
 func (srv *server) scenarioPage(w http.ResponseWriter, r *http.Request) {
 	id, err := pathID(r)
 	if err != nil {
 		fail(w, err)
 		return
 	}
+	srv.renderScenario(w, id, scenarioView{})
+}
+
+func (srv *server) renderScenario(w http.ResponseWriter, id int64, view scenarioView) {
 	sc, err := srv.store.GetScenario(id)
 	if err != nil {
 		fail(w, err)
@@ -251,7 +263,7 @@ func (srv *server) scenarioPage(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
-	// stepData는 팝오버와 상태 변경 폼이 쓰는 스텝 정보다. 화면에 JSON으로 넣는다.
+	// stepData는 팝오버가 쓰는 스텝 정보다. 화면에 JSON으로 넣는다.
 	type stepData struct {
 		ID             int64              `json:"id"`
 		Name           string             `json:"name"`
@@ -263,7 +275,15 @@ func (srv *server) scenarioPage(w http.ResponseWriter, r *http.Request) {
 		CheckedAt      string             `json:"checkedAt"`
 		Issues         []store.IssueBrief `json:"issues"`
 	}
+	// stepRow는 상태 표의 한 줄이다. 거부된 저장이 있으면 입력 값을 그대로 보여 준다.
+	type stepRow struct {
+		store.FlatStep
+		Form  store.StepStatusChange
+		Error string
+		Fixed []store.IssueBrief
+	}
 	data := make([]stepData, len(steps))
+	rows := make([]stepRow, len(steps))
 	stat := scenarioStat{Counts: map[string]int{}}
 	now := time.Now()
 	for i, st := range steps {
@@ -276,6 +296,18 @@ func (srv *server) scenarioPage(w http.ResponseWriter, r *http.Request) {
 		if st.CheckedAt.Valid {
 			data[i].CheckedAt = st.CheckedTime().Format("2006-01-02")
 		}
+		rows[i] = stepRow{FlatStep: st, Form: store.StepStatusChange{StepID: st.ID, Status: st.Status, CheckedPackage: st.CheckedPackage, CheckedBy: st.CheckedBy}, Error: view.RowErrors[st.ID]}
+		if c, ok := view.Submitted[st.ID]; ok {
+			rows[i].Form = c
+		}
+		for _, b := range stepIssues[st.ID] {
+			if b.Status == store.IssueFixed {
+				rows[i].Fixed = append(rows[i].Fixed, b)
+			}
+		}
+	}
+	if view.Status != 0 {
+		w.WriteHeader(view.Status)
 	}
 	srv.render(w, "scenario.html", map[string]any{
 		"People":       people,
@@ -285,10 +317,12 @@ func (srv *server) scenarioPage(w http.ResponseWriter, r *http.Request) {
 		"Map":          railmap.Render(railmap.Input{Tree: tree, Unresolved: unresolved, StaleDays: staleDays, Now: now}),
 		"Outline":      outline.Format(store.ToOutline(tree)),
 		"Steps":        steps,
+		"Rows":         rows,
 		"StepData":     data,
 		"StepStatuses": store.StepStatuses,
 		"Colors":       railmap.Color,
 		"StaleDays":    staleDays,
+		"Error":        view.Error,
 	})
 }
 
@@ -314,22 +348,71 @@ func (srv *server) saveOutline(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (srv *server) setStepStatus(w http.ResponseWriter, r *http.Request) {
+// bulkStepStatus는 편집 탭의 상태 표를 한 번에 저장한다. 바뀐 줄만 저장하고, 한 줄이라도 규칙에 어긋나면 전체를 저장하지 않는다.
+// 미해결 이슈 없이 블록으로 바꾸려는 줄은 나머지를 먼저 저장한 뒤 이슈 등록 화면으로 보낸다.
+func (srv *server) bulkStepStatus(w http.ResponseWriter, r *http.Request) {
 	id, err := pathID(r)
 	if err != nil {
 		fail(w, err)
 		return
 	}
-	st, err := srv.store.GetStep(id)
+	if _, err := srv.store.GetScenario(id); err != nil {
+		fail(w, err)
+		return
+	}
+	steps, err := srv.store.ScenarioSteps(id)
 	if err != nil {
 		fail(w, err)
 		return
 	}
-	_, err = srv.store.SetStepStatus(id, r.FormValue("status"),
-		strings.TrimSpace(r.FormValue("checked_package")), strings.TrimSpace(r.FormValue("checked_by")))
-	if err != nil {
+	var changes []store.StepStatusChange
+	submitted := map[int64]store.StepStatusChange{}
+	rowErrors := map[int64]string{}
+	var pendingBlock *store.Step
+	for i := range steps {
+		st := steps[i]
+		key := strconv.FormatInt(st.ID, 10)
+		if r.FormValue("status_"+key) == "" {
+			continue
+		}
+		c := store.StepStatusChange{StepID: st.ID, Status: r.FormValue("status_" + key),
+			CheckedPackage: strings.TrimSpace(r.FormValue("checked_package_" + key)), CheckedBy: strings.TrimSpace(r.FormValue("checked_by_" + key))}
+		submitted[st.ID] = c
+		if !c.Changed(st) {
+			continue
+		}
+		if c.Status == store.StepBlocked && st.Status != store.StepBlocked {
+			n, err := srv.store.UnresolvedCount(st.ID)
+			if err != nil {
+				fail(w, err)
+				return
+			}
+			if n == 0 {
+				if pendingBlock == nil {
+					pendingBlock = &st
+				} else {
+					rowErrors[st.ID] = "미해결 이슈가 없어 블록으로 바꿀 수 없습니다. 먼저 이슈를 등록하세요"
+				}
+				continue
+			}
+		}
+		if err := srv.store.ValidateStepStatus(c); err != nil {
+			rowErrors[st.ID] = err.Error()
+			continue
+		}
+		changes = append(changes, c)
+	}
+	if len(rowErrors) > 0 {
+		srv.renderScenario(w, id, scenarioView{Status: http.StatusBadRequest, Error: "저장하지 않았습니다. 표시된 줄을 고쳐 다시 저장하세요.", RowErrors: rowErrors, Submitted: submitted})
+		return
+	}
+	if _, err := srv.store.SetStepStatuses(changes); err != nil {
 		fail(w, err)
 		return
 	}
-	http.Redirect(w, r, "/scenarios/"+strconv.FormatInt(st.ScenarioID, 10)+"?tab=edit&step="+strconv.FormatInt(id, 10), http.StatusSeeOther)
+	if pendingBlock != nil {
+		http.Redirect(w, r, "/issues/new?step_id="+strconv.FormatInt(pendingBlock.ID, 10)+"&then=block", http.StatusSeeOther)
+		return
+	}
+	http.Redirect(w, r, "/scenarios/"+strconv.FormatInt(id, 10)+"?tab=edit", http.StatusSeeOther)
 }
