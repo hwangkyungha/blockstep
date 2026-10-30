@@ -25,9 +25,14 @@ func TestIssueCreateListDetail(t *testing.T) {
 		t.Errorf("스텝이 미리 선택되지 않았다")
 	}
 
-	rec := e.do("POST", "/issues", url.Values{"title": {"x"}})
+	rec := e.do("POST", "/issues", url.Values{"title": {"입력 유지 확인"}, "step_ids": {itoa(lic.ID)}})
 	if rec.Code != http.StatusBadRequest {
 		t.Errorf("필수 칸 없는 등록 = %d", rec.Code)
+	}
+	for _, want := range []string{`class="error-box"`, "발견 패키지를 적어야 합니다", `value="입력 유지 확인"`, `value="` + itoa(lic.ID) + `" checked`} {
+		if !strings.Contains(rec.Body.String(), want) {
+			t.Errorf("거부된 등록 화면에 %q가 없다", want)
+		}
 	}
 	rec = e.do("POST", "/issues", issueForm(lic.ID))
 	e.mustRedirect(rec, "/issues/1")
@@ -73,8 +78,8 @@ func TestIssueUpdateReleasesStepAndNotes(t *testing.T) {
 	form := issueForm(lic.ID)
 	form.Set("status", "fixed")
 	form.Set("actor", "김엔진")
-	if rec := e.do("POST", "/issues/1", form); rec.Code != http.StatusBadRequest {
-		t.Errorf("반영 패키지 없는 조치 완료 = %d", rec.Code)
+	if rec := e.do("POST", "/issues/1", form); rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), `class="error-box"`) || !strings.Contains(rec.Body.String(), `action="/issues/1"`) {
+		t.Errorf("반영 패키지 없는 조치 완료 = %d, 편집 화면에 오류 상자가 있어야 한다", rec.Code)
 	}
 	form.Set("applied_package", "2026-10-30")
 	form.Set("resolution_note", "새 바이너리 적용")
@@ -85,8 +90,8 @@ func TestIssueUpdateReleasesStepAndNotes(t *testing.T) {
 	}
 
 	e.mustRedirect(e.do("POST", "/issues/1/notes", url.Values{"author": {"김엔진"}, "body": {"원인 파악 중"}}), "/issues/1")
-	if rec := e.do("POST", "/issues/1/notes", url.Values{"author": {"김엔진"}}); rec.Code != http.StatusBadRequest {
-		t.Errorf("빈 기록 = %d", rec.Code)
+	if rec := e.do("POST", "/issues/1/notes", url.Values{"author": {"김엔진"}}); rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "작성자와 내용을 적어야 합니다") || !strings.Contains(rec.Body.String(), `value="김엔진"`) {
+		t.Errorf("빈 기록 = %d, 상세 화면의 기록 폼 위에 오류가 있어야 한다", rec.Code)
 	}
 	detail := e.get("/issues/1")
 	for _, want := range []string{"원인 파악 중", "김엔진 · <b>status</b> open → fixed", `id="combo-people">["김엔진","홍길동"]</script>`} {
@@ -129,8 +134,8 @@ func TestIssueFixAndStatusForms(t *testing.T) {
 	}
 
 	// 조치 완료 폼: 두 칸이 비면 거부, 적으면 조치 완료가 되고 다른 칸은 유지된다.
-	if rec := e.do("POST", "/issues/1/fix", url.Values{"applied_package": {"2026-10-30"}}); rec.Code != http.StatusBadRequest {
-		t.Errorf("처리 후 내용 없는 조치 완료 = %d", rec.Code)
+	if rec := e.do("POST", "/issues/1/fix", url.Values{"applied_package": {"2026-10-30"}}); rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "반영 패키지와 처리 후 내용을 적어야 합니다") || !strings.Contains(rec.Body.String(), `name="applied_package" data-combo="packages" autocomplete="off" value="2026-10-30"`) {
+		t.Errorf("처리 후 내용 없는 조치 완료 = %d, 조치 완료 폼 위에 오류와 입력 값이 있어야 한다", rec.Code)
 	}
 	e.mustRedirect(e.do("POST", "/issues/1/fix", url.Values{"applied_package": {"2026-10-30"}, "resolution_note": {"새 바이너리"}, "jira_key": {"CT2612-405"}}), "/issues/1")
 	issue, _ = e.store.GetIssue(1)

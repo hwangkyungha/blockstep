@@ -1,6 +1,7 @@
 package web
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -221,13 +222,13 @@ func (srv *server) issueCreate(w http.ResponseWriter, r *http.Request) {
 			linked = linked || sid == blockStep
 		}
 		if !linked {
-			fail(w, store.ValidationError("블록으로 바꿀 스텝이 연결 스텝에 들어 있어야 합니다"))
+			srv.renderIssueForm(w, "issue_new.html", in, blockStep, store.ValidationError("블록으로 바꿀 스텝이 연결 스텝에 들어 있어야 합니다"))
 			return
 		}
 	}
 	id, res, err := srv.store.CreateIssue(in, actor)
 	if err != nil {
-		fail(w, err)
+		srv.renderIssueForm(w, "issue_new.html", in, blockStep, err)
 		return
 	}
 	if blockStep != 0 {
@@ -251,12 +252,25 @@ func (srv *server) issueCreate(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/issues/"+strconv.FormatInt(id, 10), http.StatusSeeOther)
 }
 
+// issueView는 상세 화면을 다시 그릴 때 덧붙이는 값이다. ErrorAt은 오류를 보여 줄 폼("status", "fix", "note")이다.
+type issueView struct {
+	Error      string
+	ErrorAt    string
+	FixForm    store.IssueInput
+	NoteAuthor string
+	NoteBody   string
+}
+
 func (srv *server) issuePage(w http.ResponseWriter, r *http.Request) {
 	id, err := pathID(r)
 	if err != nil {
 		fail(w, err)
 		return
 	}
+	srv.renderIssuePage(w, id, issueView{})
+}
+
+func (srv *server) renderIssuePage(w http.ResponseWriter, id int64, view issueView) {
 	issue, err := srv.store.GetIssue(id)
 	if err != nil {
 		fail(w, err)
@@ -282,11 +296,34 @@ func (srv *server) issuePage(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
+	fix := issue
+	if view.ErrorAt == "fix" {
+		fix.AppliedPackage, fix.ResolutionNote, fix.JiraKey = view.FixForm.AppliedPackage, view.FixForm.ResolutionNote, view.FixForm.JiraKey
+	}
 	data["Issue"] = issue
+	data["Fix"] = fix
 	data["Notes"] = notes
 	data["Logs"] = logs
 	data["FixHint"] = hint
+	data["Error"] = view.Error
+	data["ErrorAt"] = view.ErrorAt
+	data["NoteAuthor"] = view.NoteAuthor
+	data["NoteBody"] = view.NoteBody
+	if view.Error != "" {
+		w.WriteHeader(http.StatusBadRequest)
+	}
 	srv.render(w, "issue.html", data)
+}
+
+// detailError는 상세 화면의 폼이 거부되었을 때 그 폼 위에 오류를 보여 주며 화면을 다시 그린다.
+func (srv *server) detailError(w http.ResponseWriter, id int64, err error, view issueView) {
+	var ve store.ValidationError
+	if !errors.As(err, &ve) {
+		fail(w, err)
+		return
+	}
+	view.Error = ve.Error()
+	srv.renderIssuePage(w, id, view)
 }
 
 // fixHint는 조치 완료로 바꾸면 연결된 블록 스텝이 어떻게 되는지 설명하는 글이다.
@@ -347,7 +384,53 @@ func (srv *server) issueUpdate(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
-	srv.applyIssueUpdate(w, r, old, parseIssueInput(r))
+	in := parseIssueInput(r)
+	if err := srv.applyIssueUpdate(w, r, old, in); err != nil {
+		in.Title = firstNonEmpty(in.Title, old.Title)
+		srv.renderIssueForm(w, "issue_edit.html", in, 0, err, old.ID)
+	}
+}
+
+// renderIssueForm은 등록·편집 폼을 입력 값 그대로 다시 그린다. 입력 오류는 400, 그 밖의 오류는 500이다.
+func (srv *server) renderIssueForm(w http.ResponseWriter, page string, in store.IssueInput, blockStep int64, err error, id ...int64) {
+	var ve store.ValidationError
+	if !errors.As(err, &ve) {
+		fail(w, err)
+		return
+	}
+	data, derr := srv.formData()
+	if derr != nil {
+		fail(w, derr)
+		return
+	}
+	issue := issueFromInput(in)
+	if len(id) > 0 {
+		issue.ID = id[0]
+	}
+	if blockStep != 0 {
+		if st, err := srv.store.GetStep(blockStep); err == nil {
+			data["BlockStep"] = st
+		}
+	}
+	data["Issue"] = issue
+	data["Checked"] = checkedSet(in.StepIDs)
+	data["Error"] = ve.Error()
+	w.WriteHeader(http.StatusBadRequest)
+	srv.render(w, page, data)
+}
+
+// issueFromInput은 폼 입력 값을 화면에 다시 채우기 위한 Issue로 바꾼다.
+func issueFromInput(in store.IssueInput) store.Issue {
+	return store.Issue{Title: in.Title, Description: in.Description, Reporter: in.Reporter, Assignee: in.Assignee,
+		Status: in.Status, Priority: in.Priority, FoundPackage: in.FoundPackage, AppliedPackage: in.AppliedPackage,
+		DueDate: in.DueDate, ResolutionNote: in.ResolutionNote, JiraKey: in.JiraKey}
+}
+
+func firstNonEmpty(a, b string) string {
+	if a != "" {
+		return a
+	}
+	return b
 }
 
 // issueFix는 상세 화면의 「조치 완료로 바꾸기」 폼이다. 반영 패키지, 처리 후 내용, Jira 키만 받는다.
@@ -367,7 +450,9 @@ func (srv *server) issueFix(w http.ResponseWriter, r *http.Request) {
 	in.AppliedPackage = r.FormValue("applied_package")
 	in.ResolutionNote = r.FormValue("resolution_note")
 	in.JiraKey = r.FormValue("jira_key")
-	srv.applyIssueUpdate(w, r, old, in)
+	if err := srv.applyIssueUpdate(w, r, old, in); err != nil {
+		srv.detailError(w, id, err, issueView{ErrorAt: "fix", FixForm: in})
+	}
 }
 
 // issueStatus는 상세 화면의 「상태 바꾸기」다. 조치 완료는 전용 폼으로 보낸다.
@@ -385,20 +470,23 @@ func (srv *server) issueStatus(w http.ResponseWriter, r *http.Request) {
 	in := inputFrom(old)
 	in.Status = r.FormValue("status")
 	if in.Status == store.IssueFixed {
-		fail(w, store.ValidationError("조치 완료는 「조치 완료로 바꾸기」 폼에서 반영 패키지와 처리 후 내용을 적어 바꿉니다"))
+		srv.detailError(w, id, store.ValidationError("조치 완료는 「조치 완료로 바꾸기」 폼에서 반영 패키지와 처리 후 내용을 적어 바꿉니다"), issueView{ErrorAt: "status"})
 		return
 	}
-	srv.applyIssueUpdate(w, r, old, in)
+	if err := srv.applyIssueUpdate(w, r, old, in); err != nil {
+		srv.detailError(w, id, err, issueView{ErrorAt: "status"})
+	}
 }
 
-func (srv *server) applyIssueUpdate(w http.ResponseWriter, r *http.Request, old store.Issue, in store.IssueInput) {
+// applyIssueUpdate는 이슈를 저장하고 상세 화면으로 보낸다. 거부되면 응답을 쓰지 않고 오류를 돌려준다.
+func (srv *server) applyIssueUpdate(w http.ResponseWriter, r *http.Request, old store.Issue, in store.IssueInput) error {
 	res, err := srv.store.UpdateIssue(old.ID, in, strings.TrimSpace(r.FormValue("actor")))
 	if err != nil {
-		fail(w, err)
-		return
+		return err
 	}
 	srv.notifyIssueUpdate(old.ID, old.Status, res)
 	http.Redirect(w, r, "/issues/"+strconv.FormatInt(old.ID, 10), http.StatusSeeOther)
+	return nil
 }
 
 func (srv *server) addNote(w http.ResponseWriter, r *http.Request) {
@@ -408,7 +496,7 @@ func (srv *server) addNote(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := srv.store.AddNote(id, r.FormValue("author"), r.FormValue("body")); err != nil {
-		fail(w, err)
+		srv.detailError(w, id, err, issueView{ErrorAt: "note", NoteAuthor: r.FormValue("author"), NoteBody: r.FormValue("body")})
 		return
 	}
 	http.Redirect(w, r, "/issues/"+strconv.FormatInt(id, 10), http.StatusSeeOther)

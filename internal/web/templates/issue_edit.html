@@ -4,6 +4,7 @@
 <h1>#{{.Issue.ID}} 편집</h1>
 <section class="card pad">
 <form method="post" action="/issues/{{.Issue.ID}}" class="stack">
+{{if .Error}}<div class="error-box" role="alert">{{.Error}}</div>{{end}}
 {{template "issue_fields" .}}
 <div class="row">
   <button type="submit" class="btn primary">저장</button>

@@ -4,6 +4,7 @@
 <h1>이슈 등록</h1>
 <section class="card pad">
 <form method="post" action="/issues" class="stack">
+{{if .Error}}<div class="error-box" role="alert">{{.Error}}</div>{{end}}
 {{with .BlockStep}}
 <div class="note">저장하면 스텝 「{{.Name}}」이 블록으로 바뀝니다. 취소하면 상태는 그대로입니다.</div>
 <input type="hidden" name="then" value="block"><input type="hidden" name="step_id" value="{{.ID}}">
